@@ -90,9 +90,9 @@ const router = createBrowserRouter([
       {
         path: "dashboard",
         element: (
-          // <TokenUserProtectedRoute>
+          <TokenUserProtectedRoute>
             <UserDashboard />
-          // </TokenUserProtectedRoute>
+          </TokenUserProtectedRoute>
         ),
         children: [
           {
