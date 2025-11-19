@@ -9,7 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Axios from "../../api/Axios";
-import SummaryApi from "../../api/summaryApi";
+import SummaryApi from "../../api/SummaryApi";
 import { toast } from "react-toastify";
 import Swal from "sweetalert2";
 

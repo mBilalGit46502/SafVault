@@ -14,7 +14,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-toastify";
 import Axios from "../../api/Axios";
-import SummaryApi from "../../api/summaryApi";
+import SummaryApi from "../../api/SummaryApi";
 
 export default function TokenFolders() {
   const [loading, setLoading] = useState(true);

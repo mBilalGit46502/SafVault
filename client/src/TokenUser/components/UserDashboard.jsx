@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import TokenHeader from "./TokenHeader";
 import Swal from "sweetalert2";
 import Axios from "../../api/Axios";
-import SummaryApi from "../../api/summaryApi";
+import SummaryApi from "../../api/SummaryApi";
 import TokenFolders from "./TokenFolders";
 import { jwtDecode } from "jwt-decode";
 
