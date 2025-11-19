@@ -94,17 +94,6 @@ const router = createBrowserRouter([
             <UserDashboard />
           </TokenUserProtectedRoute>
         ),
-        children: [
-          {
-            path: "profile",
-
-            element: (
-              <TokenUserProtectedRoute>
-                <TokenHeader />
-              </TokenUserProtectedRoute>
-            ),
-          },
-        ],
       },
 
       {

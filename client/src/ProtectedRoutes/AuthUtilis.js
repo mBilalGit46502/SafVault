@@ -7,7 +7,7 @@ export const getOwnerAuthState = () => {
 };
 
 export const getTokenUserAuthState = () => {
-  const tokenLog = localStorage.getItem("tokenLog");
+  const tokenLog = localStorage.getItem("tokenLogin");
   const isApproved = localStorage.getItem("isApproved") === "true";
 
   return {

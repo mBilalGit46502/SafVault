@@ -6,11 +6,11 @@ function TokenUserProtectedRoute({ children }) {
   const tokenUserAuth = getTokenUserAuthState();
   const { isAuthenticated, isApproved } = tokenUserAuth;
 
-  if (ownerAuth.isAuthenticated) {
-    return <Navigate to="/folder" replace />;
-  }
+  // if (ownerAuth.isAuthenticated) {
+  //   return <Navigate to="/folder" replace />;
+  // }
 
-  if (!isAuthenticated || !isApproved) {
+  if (!isAuthenticated && !isApproved) {
     return <Navigate to="/pending-access" replace />;
   }
 
