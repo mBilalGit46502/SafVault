@@ -90,15 +90,20 @@ const router = createBrowserRouter([
       {
         path: "dashboard",
         element: (
-          // <TokenUserProtectedRoute>
+          <TokenUserProtectedRoute>
             <UserDashboard />
-          // </TokenUserProtectedRoute>
+            //{" "}
+          </TokenUserProtectedRoute>
         ),
       },
 
       {
         path: "pending-access",
-        element: <PendingAccess />
+        element: (
+          <TokenUserProtectedRoute>
+            <PendingAccess />
+          </TokenUserProtectedRoute>
+        ),
       },
       {
         path: "about",

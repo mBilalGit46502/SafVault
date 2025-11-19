@@ -6,9 +6,9 @@ function OwnerProtectedRoute({ children }) {
   const ownerAuth = getOwnerAuthState();
   const tokenUserAuth = getTokenUserAuthState();
 
-  if (tokenUserAuth.isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // if (tokenUserAuth.isAuthenticated) {
+  //   return <Navigate to="/dashboard" replace />;
+  // }
 
   if (!ownerAuth.isAuthenticated) {
     return <Navigate to="/login" replace />;
