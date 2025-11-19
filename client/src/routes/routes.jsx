@@ -94,11 +94,22 @@ const router = createBrowserRouter([
             <UserDashboard />
           </TokenUserProtectedRoute>
         ),
+        children: [
+          {
+            path: "profile",
+
+            element: (
+              <TokenUserProtectedRoute>
+                <TokenHeader />
+              </TokenUserProtectedRoute>
+            ),
+          },
+        ],
       },
 
       {
         path: "pending-access",
-        element: <PendingAccess />,
+        element: <PendingAccess />
       },
       {
         path: "about",
