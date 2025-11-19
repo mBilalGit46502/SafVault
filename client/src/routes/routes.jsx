@@ -90,20 +90,20 @@ const router = createBrowserRouter([
       {
         path: "dashboard",
         element: (
-          <TokenUserProtectedRoute>
+          // <TokenUserProtectedRoute>
             <UserDashboard />
-          </TokenUserProtectedRoute>
+          // </TokenUserProtectedRoute>
         ),
         children: [
-          {
-            path: "profile",
+          // {
+          //   path: "profile",
 
-            element: (
-              <TokenUserProtectedRoute>
-                <TokenHeader />
-              </TokenUserProtectedRoute>
-            ),
-          },
+          //   element: (
+          //     // <TokenUserProtectedRoute>
+          //       <TokenHeader />
+          //     // </TokenUserProtectedRoute>
+          //   ),
+          // },
         ],
       },
 
