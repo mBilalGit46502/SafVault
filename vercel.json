@@ -1,7 +1,6 @@
 {
   "version": 2,
 
-  "installCommand": "cd client && npm install && cd .. && cd server && npm install",
 
   "builds": [
     {
