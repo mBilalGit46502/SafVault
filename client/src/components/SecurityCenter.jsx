@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import { toast } from "react-toastify";
 import Swal from "sweetalert2";
 import { motion, AnimatePresence } from "framer-motion";

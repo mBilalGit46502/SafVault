@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react"; // Removed useEffect
 import { toast } from "react-toastify";
 import { noImage } from "../assets";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import Loader from "../utils/Loader";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";

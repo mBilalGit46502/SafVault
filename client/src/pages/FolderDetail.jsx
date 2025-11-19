@@ -21,7 +21,7 @@ import {
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import FileUpload from "../components/FileUpload";
 import { useDispatch, useSelector } from "react-redux";
 import { addFileToFolder, setCurrentFolder } from "../storeSlices/folderSlice";

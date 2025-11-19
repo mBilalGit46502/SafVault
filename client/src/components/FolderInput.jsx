@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { X } from "lucide-react";
 import Axios from "../api/Axios";
 import { toast } from "react-toastify";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import { createFolder } from "../storeSlices/folderSlice";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";

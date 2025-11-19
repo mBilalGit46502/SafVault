@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import { toast } from "react-toastify";
 import { loginUser, logoutUser } from "../storeSlices/userSlice";
 import { noImage } from "../assets";

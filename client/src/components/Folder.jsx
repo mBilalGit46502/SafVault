@@ -10,7 +10,7 @@ import {
   Moon,
 } from "lucide-react";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { setFolders } from "../storeSlices/folderSlice";

@@ -1,7 +1,7 @@
 // src/api/Axios.js
 import axios from "axios";
 import { toast } from "react-toastify";
-import { BaseUrl } from "./summaryApi";
+import { BaseUrl } from "./SummaryApi";
 
 const Axios = axios.create({
   baseURL: BaseUrl,

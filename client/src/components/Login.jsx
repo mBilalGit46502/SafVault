@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link as RouterLink } from "react-router-dom"; // Use RouterLink to prevent conflict with Lucide icon
 import { toast } from "react-toastify";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import { useDispatch } from "react-redux";
 import { loginUser } from "../storeSlices/userSlice";
 

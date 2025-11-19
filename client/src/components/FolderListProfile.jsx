@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FolderIcon, CheckSquare, Square } from "lucide-react";
 import Axios from "../api/Axios";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 import { toast } from "react-toastify";
 
 export default function FolderListProfile() {

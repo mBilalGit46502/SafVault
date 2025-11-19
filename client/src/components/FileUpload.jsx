@@ -3,7 +3,7 @@ import { Upload, FileImage, FileText, FileUp } from "lucide-react";
 import Axios from "../api/Axios";
 import { toast } from "react-toastify";
 import { motion } from "framer-motion";
-import SummaryApi from "../api/summaryApi";
+import SummaryApi from "../api/SummaryApi";
 
 function FileUpload({ folderId, setFiles }) {
   const [file, setFile] = useState(null);
