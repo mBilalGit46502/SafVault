@@ -99,11 +99,7 @@ const router = createBrowserRouter([
 
       {
         path: "pending-access",
-        element: (
-          <TokenUserProtectedRoute>
-            <PendingAccess />
-          </TokenUserProtectedRoute>
-        ),
+        element: <PendingAccess />,
       },
       {
         path: "about",
