@@ -7,13 +7,15 @@ import SummaryApi from "../../api/SummaryApi";
 import TokenFolders from "./TokenFolders";
 import { jwtDecode } from "jwt-decode";
 
-
 function UserDashboard() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
   const navigate = useNavigate();
   const intervalRef = useRef(null);
+  // Add a state flag to track if the dashboard has fully initialized
+  const [isInitialized, setIsInitialized] = useState(false); // NEW STATE FLAG
 
   const clearAllUserData = () => {
+    // ... (rest of the clearAllUserData function remains the same)
     try {
       localStorage.clear();
       sessionStorage.clear();
@@ -28,6 +30,7 @@ function UserDashboard() {
   };
 
   const forceLogout = async (reason = "Session expired or invalid.") => {
+    // ... (rest of the forceLogout function remains the same)
     try {
       await Axios({ ...SummaryApi.UserLogoutAndRemove });
     } catch (e) {
@@ -78,31 +81,37 @@ function UserDashboard() {
     }
   };
 
-
-useEffect(() => {
-  const token = localStorage.getItem("tokenLogin");
-  if (token) {
-    try {
-      const decoded = jwtDecode(token);
-      if (decoded.exp * 1000 < Date.now()) {
-        console.log("Token expired, clearing...");
+  useEffect(() => {
+    // This JWT expiration check is fine to run immediately and locally.
+    const token = localStorage.getItem("tokenLogin");
+    if (token) {
+      try {
+        const decoded = jwtDecode(token);
+        if (decoded.exp * 1000 < Date.now()) {
+          console.log("Token expired, clearing...");
+          localStorage.clear();
+          sessionStorage.clear();
+          navigate("/userlogin");
+        }
+      } catch (err) {
+        console.error("Invalid token:", err);
         localStorage.clear();
         sessionStorage.clear();
         navigate("/userlogin");
       }
-    } catch (err) {
-      console.error("Invalid token:", err);
-      localStorage.clear();
-      sessionStorage.clear();
-      navigate("/userlogin");
     }
-  }
-}, []);
-
+  }, [navigate]);
 
   useEffect(() => {
-    checkSessionValidity();
+    // --- CRITICAL CHANGE HERE ---
+    // 1. Set the initialization flag. This runs only once.
+    setIsInitialized(true);
 
+    // 2. We SKIP the initial immediate checkSessionValidity() call
+    // to give the server time to register the new session.
+
+    // 3. Start the interval timer immediately. The first check will run
+    // 10 seconds AFTER the component mounts.
     intervalRef.current = setInterval(checkSessionValidity, 10000);
 
     return () => clearInterval(intervalRef.current);
@@ -111,7 +120,7 @@ useEffect(() => {
   return (
     <>
       <TokenHeader theme={theme} setTheme={setTheme} />
-      <TokenFolders/>
+      <TokenFolders />
       <Outlet />
     </>
   );
