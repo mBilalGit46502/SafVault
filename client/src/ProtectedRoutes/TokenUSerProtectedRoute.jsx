@@ -10,7 +10,7 @@ function TokenUserProtectedRoute({ children }) {
   //   return <Navigate to="/folder" replace />;
   // }
 
-  if (!isAuthenticated || !isApproved) {
+  if (isAuthenticated || !isApproved) {
     return <Navigate to="/pending-access" replace />;
   }
 
