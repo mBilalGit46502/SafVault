@@ -1,7 +1,7 @@
 {
   "version": 2,
 
-  "installCommand": "cd client && npm install && cd .. && cd server && npm install",
+  "installCommand": "ls -F && cd client && npm install && cd .. && cd server && npm install",
 
   "builds": [
     {
@@ -31,3 +31,4 @@
     }
   ]
 }
+git 
