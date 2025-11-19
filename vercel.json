@@ -1,7 +1,7 @@
 {
   "version": 2,
 
-  "installCommand": "ls -F && cd client && npm install && cd .. && cd server && npm install",
+  "installCommand": "cd client && npm install && cd .. && cd server && npm install",
 
   "builds": [
     {
@@ -12,7 +12,6 @@
         "buildCommand": "npm run build"
       }
     },
-
     {
       "src": "server/index.js",
       "use": "@vercel/node"
@@ -31,4 +30,3 @@
     }
   ]
 }
-git 
