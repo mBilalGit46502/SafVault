@@ -9,7 +9,7 @@ import Axios, { autoLogoutOnExpiry } from "./api/Axios";
 import { loginUser } from "./storeSlices/userSlice";
 import Folder from "./components/Folder";
 import SummaryApi from "./api/SummaryApi";
-import LandingPage from "./LandingPAge";
+import LandingPage from "./LandingPage";
 
 function App() {
   const dispatch = useDispatch();

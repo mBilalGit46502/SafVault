@@ -617,7 +617,6 @@ export const GetUpdateTokenFolder = async (req, res) => {
       error: error.message,
     });
   }
-
 };
 
 export const recordAuditLog = async (req, res) => {
@@ -670,10 +669,8 @@ export const recordAuditLog = async (req, res) => {
   }
 };
 
-
 export const getAuditLogs = async (req, res) => {
-
-  const {userId} = req.userId;
+  const { userId } = req.userId;
 
   if (!userId) {
     return res.status(401).json({
@@ -684,11 +681,10 @@ export const getAuditLogs = async (req, res) => {
   }
 
   try {
-
     const logs = await AuditLog.find({ user: userId })
       .sort({ timestamp: -1 })
       .limit(50)
-      .select("-__v"); 
+      .select("-__v");
 
     return res.status(200).json({
       message: "Audit logs retrieved successfully.",

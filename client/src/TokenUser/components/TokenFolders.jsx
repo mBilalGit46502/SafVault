@@ -45,6 +45,42 @@ export default function TokenFolders() {
       setLoading(false);
     }
   }, []);
+  useEffect(() => {
+    const blockScreenshots = (e) => {
+      if (previewFile) {
+        e.preventDefault();
+        toast.warn("Screenshot blocked for security");
+        return false;
+      }
+    };
+
+    const blockKeys = (e) => {
+      if (previewFile) {
+        // Block PrintScreen, F12, Ctrl+Shift+I, etc.
+        if (
+          e.keyCode === 44 || // PrintScreen
+          e.keyCode === 123 || // F12
+          (e.ctrlKey && e.shiftKey && e.keyCode === 73) || // Ctrl+Shift+I
+          (e.ctrlKey && e.shiftKey && e.keyCode === 67) || // Ctrl+Shift+C
+          (e.ctrlKey && e.keyCode === 85) || // Ctrl+U
+          (e.ctrlKey && e.keyCode === 83) // Ctrl+S
+        ) {
+          e.preventDefault();
+          return false;
+        }
+      }
+    };
+
+    document.addEventListener("keyup", blockKeys);
+    document.addEventListener("keydown", blockKeys);
+    window.addEventListener("beforeprint", blockScreenshots);
+
+    return () => {
+      document.removeEventListener("keyup", blockKeys);
+      document.removeEventListener("keydown", blockKeys);
+      window.removeEventListener("beforeprint", blockScreenshots);
+    };
+  }, [previewFile]);
 
   useEffect(() => {
     fetchFoldersAndFiles();
@@ -194,8 +230,8 @@ export default function TokenFolders() {
                     onClick={() => openPreview(folder, i)}
                     className="flex items-center gap-3 bg-gray-50 hover:bg-orange-50 border border-gray-100 rounded-lg p-2 cursor-pointer transition-all"
                   >
-                    {file.name.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                      <Image className="text-blue-400" size={20} />
+                    {file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                      <Image className="text-blue-500" size={20} />
                     ) : file.name.match(/\.pdf$/i) ? (
                       <FileText className="text-red-500" size={20} />
                     ) : (
@@ -206,9 +242,7 @@ export default function TokenFolders() {
                       <p className="text-sm font-medium text-gray-700 truncate">
                         {file.name}
                       </p>
-                      <p className="text-xs text-gray-400">
-                        {(file.createdAt)}
-                      </p>
+                      <p className="text-xs text-gray-400">{file.createdAt}</p>
                     </div>
                   </motion.div>
                 ))
@@ -222,78 +256,123 @@ export default function TokenFolders() {
         ))}
       </div>
 
-      {/* File Preview Modal */}
       <AnimatePresence>
         {previewFile && (
           <motion.div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={() => setPreviewFile(null)}
           >
             <motion.div
-              className="bg-white rounded-2xl max-w-3xl w-full shadow-lg relative overflow-hidden"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full h-full max-w-5xl max-h-screen rounded-2xl overflow-hidden"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => setPreviewFile(null)}
-                className="absolute top-3 right-3 bg-gray-100 hover:bg-gray-200 p-1.5 rounded-full"
-              >
-                <X size={18} />
-              </button>
-
-              <div className="p-5">
-                <h2 className="text-lg font-semibold text-gray-700 truncate mb-3">
+              {/* Top Bar */}
+              <div className="absolute top-0 left-0 right-0 z-50 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm">
+                <h3 className="text-white text-lg font-medium truncate max-w-md">
                   {previewFile.name}
-                </h2>
-
-                <div className="rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-                  {previewFile.name.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                    <img
-                      src={previewFile.url}
-                      alt={previewFile.name}
-                      className="max-h-[70vh] object-contain"
-                    />
-                  ) : previewFile.name.match(/\.pdf$/i) ? (
-                    <iframe
-                      src={previewFile.url}
-                      className="w-full h-[70vh]"
-                      title={previewFile.name}
-                    />
-                  ) : (
-                    <div className="p-10 text-gray-400">
-                      No preview available for this file type
-                    </div>
+                </h3>
+                <div className="flex items-center gap-4">
+                  {currentFolder && (
+                    <span className="bg-white/20 backdrop-blur px-4 py-2 rounded-full text-white text-sm">
+                      {index + 1} / {currentFolder.files.length}
+                    </span>
                   )}
+                  <button
+                    onClick={() => setPreviewFile(null)}
+                    className="p-3 bg-white/20 hover:bg-white/30 rounded-full transition"
+                  >
+                    <X size={28} className="text-white" />
+                  </button>
                 </div>
+              </div>
 
-                {/* Next/Previous Buttons */}
-                {currentFolder && (
-                  <div className="flex justify-between mt-4">
-                    <button
-                      onClick={prevFile}
-                      disabled={index === 0}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-lg text-sm ${
-                        index === 0
-                          ? "text-gray-300 bg-gray-100 cursor-not-allowed"
-                          : "text-orange-600 bg-orange-50 hover:bg-orange-100"
-                      }`}
-                    >
-                      <ChevronLeft size={16} /> Previous
-                    </button>
-                    <button
-                      onClick={nextFile}
-                      disabled={index === currentFolder.files.length - 1}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-lg text-sm ${
-                        index === currentFolder.files.length - 1
-                          ? "text-gray-300 bg-gray-100 cursor-not-allowed"
-                          : "text-orange-600 bg-orange-50 hover:bg-orange-100"
-                      }`}
-                    >
-                      Next <ChevronRight size={16} />
-                    </button>
+              {/* Navigation */}
+              {currentFolder && currentFolder.files.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      prevFile();
+                    }}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 z-40 p-4 bg-black/60 hover:bg-black/80 rounded-full transition"
+                  >
+                    <ChevronLeft size={40} className="text-white" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nextFile();
+                    }}
+                    className="absolute  right-0 top-1/2 -translate-y-1/2 z-40 p-4 bg-black/60 hover:bg-black/80 rounded-full transition"
+                  >
+                    <ChevronRight size={40} className="text-white" />
+                  </button>
+                </>
+              )}
+
+              {/* CONTENT */}
+              <div className="h-full flex items-center justify-center pt-20 pb-10  overflow-auto">
+                {previewFile.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                  <img
+                    src={previewFile.url}
+                    alt={previewFile.name}
+                    className="max-w-full max-h-full  object-contain rounded-xl shadow-2xl"
+                    draggable={false}
+                  />
+                ) : previewFile.name.match(/\.pdf$/i) ? (
+                  /* 100% CLEAN PDF - TOOLBAR GONE FOREVER */
+                  <iframe
+                    src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
+                      previewFile.url
+                    )}#toolbar=0&navpanes=0&scrollbar=0&statusbar=0&messages=0&view=FitH&pagemode=none`}
+                    className="w-full h-full min-h-screen rounded-xl border-0 shadow-2xl"
+                    title="Document"
+                    allowFullScreen
+                    style={{
+                      background: "transparent",
+                      pointerEvents: "auto",
+                    }}
+                    sandbox="allow-scripts allow-same-origin"
+                    // THIS LINE REMOVES TOOLBAR EVEN IF PDF.js TRIES TO SHOW IT
+                    onLoad={(e) => {
+                      const iframe = e.target;
+                      const hideToolbar = () => {
+                        try {
+                          const doc =
+                            iframe.contentDocument ||
+                            iframe.contentWindow.document;
+                          // Hide all possible toolbars
+                          const toolbars = doc.querySelectorAll(
+                            "#toolbar, .toolbar, #secondaryToolbar, .secondaryToolbar"
+                          );
+                          toolbars.forEach(
+                            (el) => el && (el.style.display = "none")
+                          );
+                          // Hide header
+                          const header = doc.querySelector("#header, .header");
+                          if (header) header.style.display = "none";
+                          // Hide outer container margin
+                          const outer = doc.querySelector("#outerContainer");
+                          if (outer) outer.style.top = "0";
+                        } catch (err) {}
+                      };
+                      // Run multiple times to catch late loading
+                      hideToolbar();
+                      setTimeout(hideToolbar, 100);
+                      setTimeout(hideToolbar, 500);
+                      setTimeout(hideToolbar, 1000);
+                    }}
+                  />
+                ) : (
+                  <div className="text-white/70 text-center">
+                    <File size={80} />
+                    <p className="mt-6 text-xl">Preview not available</p>
                   </div>
                 )}
               </div>

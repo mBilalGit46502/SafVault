@@ -26,6 +26,130 @@ import FileUpload from "../components/FileUpload";
 import { useDispatch, useSelector } from "react-redux";
 import { addFileToFolder, setCurrentFolder } from "../storeSlices/folderSlice";
 import { motion } from "framer-motion";
+
+// ────────────────────── PDF.js Setup (Vite 2025) ──────────────────────
+import * as pdfjsLib from "pdfjs-dist";
+import { get, set } from "idb-keyval";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).href;
+
+// ────────────────────── THUMBNAIL CACHING (Never reloads again) ──────────────────────
+// ────────────────────── PERFECT THUMBNAIL CACHING (FIXED) ──────────────────────
+const memoryCache = new Map();
+
+// Use full URL + fileId (or just full URL if unique)
+const getCacheKey = (url, fileId) => `pdf_thumb_${fileId || url}`;
+
+const getCachedThumbnail = async (url, fileId) => {
+  const key = getCacheKey(url, fileId);
+  if (memoryCache.has(key)) return memoryCache.get(key);
+
+  try {
+    const cached = await get(key);
+    if (cached) memoryCache.set(key, cached);
+    return cached;
+  } catch {
+    return null;
+  }
+};
+
+const saveThumbnailToCache = async (url, fileId, dataUrl) => {
+  const key = getCacheKey(url, fileId);
+  memoryCache.set(key, dataUrl);
+  try {
+    await set(key, dataUrl);
+  } catch (err) {
+    console.warn("Cache save failed", err);
+  }
+};
+// ────────────────────── CACHED PDF THUMBNAIL COMPONENT ──────────────────────
+const PdfThumbnail = ({ url, fileName, fileId }) => {
+  // ← Add fileId prop
+  const canvasRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const renderThumbnail = async () => {
+      if (!url || cancelled) return;
+
+      // Use fileId for unique cache key
+      const cached = await getCachedThumbnail(url, fileId);
+      if (cached && !cancelled) {
+        const img = new Image();
+        img.onload = () => {
+          if (cancelled) return;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          setLoading(false);
+        };
+        img.src = cached;
+        return;
+      }
+
+      try {
+        const loadingTask = pdfjsLib.getDocument(url);
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.5 });
+
+        const canvas = canvasRef.current;
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({
+          canvasContext: canvas.getContext("2d"),
+          viewport,
+        }).promise;
+
+        if (cancelled) return;
+
+        const dataUrl = canvas.toDataURL("image/webp", 0.9);
+        await saveThumbnailToCache(url, fileId, dataUrl); // ← Pass fileId
+
+        setLoading(false);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("PDF thumbnail failed:", fileName, err);
+          setLoading(false);
+        }
+      }
+    };
+
+    renderThumbnail();
+    return () => {
+      cancelled = true;
+    };
+  }, [url, fileName, fileId]); // ← Add fileId to deps
+
+  return (
+    <div className="relative w-full h-40 bg-gray-100 rounded-lg border overflow-hidden">
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+          <div className="text-xs text-gray-500 animate-pulse">Loading...</div>
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        className="w-full h-25 object-cover rounded-lg"
+        style={{ display: loading ? "none" : "block" }}
+      />
+      {!loading && (
+        <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+          PDF
+        </div>
+      )}
+    </div>
+  );
+};
+// ────────────────────── MAIN COMPONENT ──────────────────────
 ReactModal.setAppElement("#root");
 
 function FolderDetail() {
@@ -58,23 +182,21 @@ function FolderDetail() {
     const fetchFiles = async () => {
       try {
         const { data } = await Axios({ ...SummaryApi.getFilesInFolder(id) });
-
         if (data?.success) {
-          setFiles(data?.data); // keep this
+          setFiles(data?.data);
           dispatch(addFileToFolder(data?.data));
-        } else toast.error(data?.message);
+        } else toast.error(data?.message || "Failed to load files");
       } catch {
         toast.error("Failed to load files");
       }
     };
 
-    console.log("files", files);
     const getFolder = async () => {
       try {
         const { data } = await Axios({ ...SummaryApi.getFolder(id) });
         if (data?.success) dispatch(setCurrentFolder(data.data));
       } catch {
-        toast.error("Failed to load folder info");
+        toast.error("Failed to load folder");
       }
     };
 
@@ -87,164 +209,151 @@ function FolderDetail() {
   }, [editingFileId]);
 
   const handleRename = async (fileId) => {
-    if (!newFileName.trim()) return toast.error("File name cannot be empty!");
+    if (!newFileName.trim()) return toast.error("Name cannot be empty");
     try {
       const { data } = await Axios({
         ...SummaryApi.renameFile(fileId),
         data: { newFileName },
       });
-      console.log("rename", data);
-
       if (data.success) {
-        toast.success("File renamed successfully");
-        setFiles((prevFiles) =>
-          prevFiles.map((file) =>
-            file._id === fileId ? { ...file, name: newFileName } : file
-          )
+        toast.success("Renamed successfully");
+        setFiles((prev) =>
+          prev.map((f) => (f._id === fileId ? { ...f, name: newFileName } : f))
         );
-
         setEditingFileId(null);
         setNewFileName("");
-      } else toast.error(data?.message);
+      } else toast.error(data.message);
     } catch {
-      toast.error("Rename failed!");
+      toast.error("Rename failed");
     }
   };
-
-  const openFile = (index) => setSelectedFileIndex(index);
-  const closeModal = () => setSelectedFileIndex(null);
-  const nextFile = () => setSelectedFileIndex((p) => (p + 1) % files.length);
-  const prevFile = () =>
-    setSelectedFileIndex((p) => (p === 0 ? files.length - 1 : p - 1));
-  const selectedFile = files[selectedFileIndex];
 
   const handleDelete = async (fileId) => {
     try {
       const card = document.getElementById(fileId);
-      if (card) {
+      if (card)
         card.classList.add(
           "opacity-0",
           "scale-90",
           "transition-all",
           "duration-300"
         );
-      }
 
       const { data } = await Axios({ ...SummaryApi.deleteFile(fileId) });
       if (data?.success) {
-        setTimeout(() => {
-          setFiles((prev) => prev.filter((f) => f._id !== fileId));
-        }, 300);
-        toast.success(data?.message);
+        setTimeout(
+          () => setFiles((prev) => prev.filter((f) => f._id !== fileId)),
+          300
+        );
+        toast.success("File deleted");
         setConfirmDelete({ open: false, fileId: null });
-      } else toast.error(data?.message);
+      } else toast.error(data.message);
     } catch {
-      toast.error("Delete failed!");
+      toast.error("Delete failed");
     }
   };
+
   const handleDownload = async (fileUrl, fileName) => {
     try {
-      const response = await fetch(fileUrl);
-      const blob = await response.blob();
-
-      // Create a temporary link with correct filename & extension
-      const link = document.createElement("a");
-      link.href = window.URL.createObjectURL(blob);
-      link.download = fileName || "downloaded-file";
-
-      // Trigger the download
-      document.body.appendChild(link);
-      link.click();
-
-      // Clean up
-      link.remove();
-      window.URL.revokeObjectURL(link.href);
-    } catch (error) {
-      toast.error("❌ Download failed. Please try again!");
-      console.error("Download error:", error);
+      const res = await fetch(fileUrl);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Download failed");
     }
   };
 
-  const [printPreview, setPrintPreview] = useState({
-    open: false,
-    fileUrl: "",
-  });
+  // ────────────────────── PERFECT PRINT (Image + PDF) ──────────────────────
+  const handlePrintPreview = async (fileUrl, fileName = "document") => {
+    if (!fileUrl) return toast.error("No file to print");
 
-  const handlePrintPreview = (fileUrl) => {
-    if (!fileUrl) return toast.error("No file selected to print!");
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    const isImage = [
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "webp",
+      "svg",
+      "bmp",
+    ].includes(ext);
+    const isPDF = ext === "pdf";
+    if (!isImage && !isPDF) return toast.error("Print not supported");
 
-    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
-    const isPDF = /\.pdf$/i.test(fileUrl);
+    toast.loading("Preparing print...", { autoClose: false });
+
+    let printUrl = fileUrl;
+    if (isPDF) {
+      try {
+        const pdf = await pdfjsLib.getDocument(fileUrl).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport })
+          .promise;
+        printUrl = canvas.toDataURL("image/png");
+        toast.dismiss();
+      } catch (err) {
+        toast.dismiss();
+        toast.error("Failed to load PDF");
+        console.error(err);
+        return;
+      }
+    } else {
+      toast.dismiss();
+    }
 
     const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "none";
+    iframe.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:none;opacity:0;";
     document.body.appendChild(iframe);
 
-    const doc = iframe.contentWindow.document;
-    doc.open();
+    iframe.contentWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body,html{margin:0;padding:0;height:100%;background:white;display:flex;justify-content:center;align-items:center;}
+            img{max-width:95%;max-height:95%;object-fit:contain;}
+            @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+          </style>
+        </head>
+        <body onload="setTimeout(() => window.print(), 500)">
+          <img src="${printUrl}" />
+        </body>
+      </html>
+    `);
+    iframe.contentWindow.document.close();
 
-    doc.write(`
-    <html>
-      <head>
-        <title>Print</title>
-        <style>
-          body {
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: white;
-          }
-          img, iframe {
-            max-width: 100%;
-            max-height: 100%;
-          }
-        </style>
-      </head>
-      <body>
-        ${
-          isImage
-            ? `<img src="${fileUrl}" alt="Print Preview" />`
-            : isPDF
-            ? `<iframe src="${fileUrl}" frameborder="0" style="width:100%; height:100vh;"></iframe>`
-            : `<p>Unsupported file type for printing.</p>`
-        }
-      </body>
-    </html>
-  `);
-
-    doc.close();
-
-    iframe.onload = () => {
-      const printWindow = iframe.contentWindow;
-      printWindow.focus();
-      printWindow.print();
-
-      printWindow.onafterprint = () => {
-        document.body.removeChild(iframe);
-      };
-    };
+    setTimeout(() => iframe.remove(), 20000);
   };
+
+  const openFile = (index) => setSelectedFileIndex(index);
+  const closeModal = () => setSelectedFileIndex(null);
+  const nextFile = () => setSelectedFileIndex((i) => (i + 1) % files.length);
+  const prevFile = () =>
+    setSelectedFileIndex((i) => (i === 0 ? files.length - 1 : i - 1));
+  const selectedFile = files[selectedFileIndex];
+
   const renderPreview = (file) => {
-    if (!file) return null;
     const ext = (file.name?.split(".").pop() || "").toLowerCase();
 
     if (!isValidUrl(file.url)) {
       return (
-        <div className="flex flex-col justify-center items-center bg-gray-100 w-full h-40 rounded-lg border text-gray-500">
+        <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg border text-gray-500">
           <FileIcon size={35} />
           <p className="text-xs mt-1">Invalid URL</p>
         </div>
       );
     }
 
-    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext))
+    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) {
       return (
         <img
           src={file.url}
@@ -253,17 +362,12 @@ function FolderDetail() {
           loading="lazy"
         />
       );
+    }
 
-    if (ext === "pdf")
-      return (
-        <iframe
-          src={file.url}
-          title={file.name}
-          className="w-full h-40 rounded-lg border"
-        />
-      );
-
-    if (["mp4", "webm", "ogg"].includes(ext))
+    if (ext === "pdf") {
+  return <PdfThumbnail url={file.url} fileName={file.name} fileId={file._id} />;
+}
+    if (["mp4", "webm", "ogg"].includes(ext)) {
       return (
         <video
           src={file.url}
@@ -271,9 +375,10 @@ function FolderDetail() {
           className="w-full h-40 object-cover rounded-lg border"
         />
       );
+    }
 
     return (
-      <div className="flex flex-col justify-center items-center bg-gray-100 w-full h-40 rounded-lg border text-gray-500">
+      <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg border text-gray-500">
         <FileIcon size={35} />
         <p className="text-xs mt-1">No Preview</p>
       </div>
@@ -281,33 +386,26 @@ function FolderDetail() {
   };
 
   const filteredFiles = [...files]
-    .filter((file) => {
-      const fileName = file?.name || file?.originalname || file?.filename || "";
-      return fileName?.toLowerCase().includes(searchTerm.toLowerCase());
-    })
+    .filter((f) =>
+      (f.name || "").toLowerCase().includes(searchTerm.toLowerCase())
+    )
     .sort((a, b) =>
       sortAsc
-        ? (a.name || a.originalname || "").localeCompare(
-            b.name || b.originalname || ""
-          )
-        : (b.name || b.originalname || "").localeCompare(
-            a.name || a.originalname || ""
-          )
+        ? (a.name || "").localeCompare(b.name || "")
+        : (b.name || "").localeCompare(a.name || "")
     );
 
   const theme = localStorage.getItem("theme");
-  const isDark = theme === "dark";
+
   return (
     <div className="p-4 sm:p-6 bg-transparent min-h-screen bg-gray-50">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
         <div className="text-center sm:text-left">
           <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
             <FolderIcon size={24} className="text-blue-600" />
-
-            <div
-              className={`${theme === "dark" ? "text-white" : "text-black"}`}
-            >
-              <div>{currentFolder?.name || "Folder"}</div>
+            <div className={theme === "dark" ? "text-white" : "text-black"}>
+              {currentFolder?.name || "Folder"}
             </div>
           </h2>
           <p className="text-gray-500 text-sm mt-1">
@@ -328,32 +426,29 @@ function FolderDetail() {
           </div>
           <button
             onClick={() => setSortAsc(!sortAsc)}
-            className="bg-blue-500  text-white rounded-xl px-3 py-2 flex items-center gap-1 hover:bg-blue-600 transition"
+            className="bg-blue-500 text-white rounded-xl px-3 py-2 flex items-center gap-1 hover:bg-blue-600 transition"
           >
             {sortAsc ? <SortAsc size={16} /> : <SortDesc size={16} />}
             <span className="hidden sm:inline text-sm">Sort</span>
           </button>
-
           <FileUpload folderId={id} setFiles={setFiles} />
         </div>
       </div>
 
-      <motion.dev
-        layout
-        className="flex flex-wrap justify-start gap-5"
-        transition={{ layout: { duration: 0.3, ease: "easeInOut" } }}
-      >
+      {/* File Grid */}
+      <motion.div layout className="flex flex-wrap justify-start gap-4">
         {filteredFiles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center w-full py-16">
+          <div className="w-full py-16 text-center">
             <FolderIcon size={50} className="mx-auto text-gray-400" />
-            <p className="text-gray-500 mt-3 text-sm">No files found.</p>
+            <p className="text-gray-500 mt-3 text-sm">No files found</p>
           </div>
         ) : (
           filteredFiles.map((file) => (
             <motion.div
               layout
               key={file._id}
-              className="relative bg-white w-[150px] sm:w-[180px] md:w-[210px] h-[260px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between"
+              id={file._id}
+              className="relative bg-white w-[150px] sm:w-[170px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between"
             >
               <div
                 onClick={() =>
@@ -361,14 +456,12 @@ function FolderDetail() {
                 }
                 className="flex-1"
               >
-                {" "}
-                {renderPreview(file)}{" "}
-              </div>{" "}
+                {renderPreview(file)}
+              </div>
+
               <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                {" "}
                 {editingFileId === file._id ? (
                   <>
-                    {" "}
                     <button
                       onMouseDown={(e) => {
                         e.preventDefault();
@@ -376,20 +469,17 @@ function FolderDetail() {
                       }}
                       className="bg-green-500 text-white rounded-full p-1 hover:bg-green-600"
                     >
-                      {" "}
-                      <Check size={18} />{" "}
-                    </button>{" "}
+                      <Check size={18} />
+                    </button>
                     <button
                       onClick={() => setEditingFileId(null)}
                       className="bg-gray-500 text-white rounded-full p-1 hover:bg-gray-600"
                     >
-                      {" "}
-                      <XCircle size={18} />{" "}
-                    </button>{" "}
+                      <XCircle size={18} />
+                    </button>
                   </>
                 ) : (
                   <>
-                    {" "}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -398,19 +488,17 @@ function FolderDetail() {
                       }}
                       className="bg-blue-500 text-white rounded-full p-1 hover:bg-blue-600"
                     >
-                      {" "}
-                      <Pencil size={18} />{" "}
-                    </button>{" "}
+                      <Pencil size={18} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handlePrintPreview(file.url);
+                        handlePrintPreview(file.url, file.name);
                       }}
                       className="bg-gray-700 text-white rounded-full p-1 hover:bg-gray-800"
                     >
-                      {" "}
-                      <Printer size={18} />{" "}
-                    </button>{" "}
+                      <Printer size={18} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -418,9 +506,8 @@ function FolderDetail() {
                       }}
                       className="bg-indigo-500 text-white rounded-full p-1 hover:bg-indigo-600"
                     >
-                      {" "}
-                      <Download size={18} />{" "}
-                    </button>{" "}
+                      <Download size={18} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -428,14 +515,13 @@ function FolderDetail() {
                       }}
                       className="bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                     >
-                      {" "}
-                      <Trash2 size={18} />{" "}
-                    </button>{" "}
+                      <Trash2 size={18} />
+                    </button>
                   </>
-                )}{" "}
-              </div>{" "}
+                )}
+              </div>
+
               <div className="mt-3 text-center">
-                {" "}
                 {editingFileId === file._id ? (
                   <input
                     ref={inputRef}
@@ -449,79 +535,123 @@ function FolderDetail() {
                   />
                 ) : (
                   <p className="text-sm font-medium text-gray-800 truncate">
-                    {" "}
-                    {file.name}{" "}
+                    {file.name}
                   </p>
-                )}{" "}
+                )}
               </div>
             </motion.div>
           ))
         )}
-      </motion.dev>
+      </motion.div>
 
+      {/* Full Preview Modal */}
       <ReactModal
         isOpen={selectedFileIndex !== null}
         onRequestClose={closeModal}
-        className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+        shouldCloseOnOverlayClick
+        shouldCloseOnEsc
+        closeTimeoutMS={350}
+        className="fixed inset-0 z-[9999] outline-none"
+        overlayClassName="fixed inset-0 z-[9998] flex items-center justify-center p-4 md:p-8 bg-black/70"
       >
         {selectedFile && isValidUrl(selectedFile.url) && (
-          <div className="relative w-11/12 max-w-4xl mx-auto flex flex-col items-center">
-            <button
-              onClick={closeModal}
-              className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/70"
-            >
-              <X size={24} />
-            </button>
-
-            <div className="flex justify-between items-center w-full">
-              <button
-                onClick={prevFile}
-                className="text-white p-2 hover:bg-black/30 rounded-full"
-              >
-                <ChevronLeft size={28} />
-              </button>
-
-              <div className="max-h-[80vh] overflow-auto">
-                {["jpg", "jpeg", "png", "webp", "gif"].includes(
-                  selectedFile.name.split(".").pop().toLowerCase()
-                ) ? (
-                  <Zoom>
-                    <img
-                      src={selectedFile.url}
-                      alt={selectedFile.name}
-                      className="max-h-[80vh] rounded-lg"
-                    />
-                  </Zoom>
-                ) : ["mp4", "webm", "ogg"].includes(
-                    selectedFile.name.split(".").pop().toLowerCase()
-                  ) ? (
-                  <video
-                    src={selectedFile.url}
-                    controls
-                    className="max-h-[80vh] rounded-lg"
-                  />
-                ) : selectedFile.name.endsWith(".pdf") ? (
-                  <iframe
-                    src={selectedFile.url}
-                    title={selectedFile.name}
-                    className="w-[80vw] h-[80vh] rounded-lg"
-                  ></iframe>
-                ) : (
-                  <p className="text-white text-center">No preview available</p>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.93 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.93 }}
+            className="relative w-full h-full rounded-3xl overflow-hidden shadow-4xl flex flex-col bg-black"
+          >
+            <div className="absolute top-0 left-0 right-0 z-50 flex justify-between items-center px-6 bg-gradient-to-b from-black/90 to-transparent backdrop-blur-2xl">
+              <h3 className="text-white font-semibold text-lg truncate max-w-md">
+                {selectedFile.name}
+              </h3>
+              <div className="flex items-center gap-4">
+                {files.length > 1 && (
+                  <span className="bg-white/20 backdrop-blur-xl text-white px-5 py-2.5 rounded-full text-sm font-medium border border-white/30">
+                    {selectedFileIndex + 1} / {files.length}
+                  </span>
                 )}
+                <button
+                  onClick={closeModal}
+                  className="bg-white/20 hover:bg-white/40 backdrop-blur-xl text-white p-3.5 rounded-full transition-all hover:scale-110 shadow-xl border border-white/40"
+                >
+                  <X size={28} strokeWidth={2.5} />
+                </button>
               </div>
-
-              <button
-                onClick={nextFile}
-                className="text-white p-2 hover:bg-black/30 rounded-full"
-              >
-                <ChevronRight size={28} />
-              </button>
             </div>
-          </div>
+
+            {files.length > 1 && (
+              <>
+                <button
+                  onClick={prevFile}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/60 hover:bg-black/80 rounded-full transition"
+                >
+                  <ChevronLeft size={36} className="text-white" />
+                </button>
+                <button
+                  onClick={nextFile}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/60 hover:bg-black/80 rounded-full transition"
+                >
+                  <ChevronRight size={36} className="text-white" />
+                </button>
+              </>
+            )}
+
+            <div className="flex-1 relative mt-20 mb-8">
+              {(() => {
+                const ext = selectedFile.name.split(".").pop()?.toLowerCase();
+                if (
+                  ["jpg", "jpeg", "png", "webp", "gif", "svg"].includes(ext)
+                ) {
+                  return (
+                    <div className="h-full flex items-center justify-center p-8">
+                      <Zoom zoomMargin={80}>
+                        <img
+                          src={selectedFile.url}
+                          alt={selectedFile.name}
+                          className="w-full h-full lg:w-[35%] m-auto object-cover rounded-xl shadow-2xl"
+                          draggable={false}
+                        />
+                      </Zoom>
+                    </div>
+                  );
+                }
+                if (["mp4", "webm", "ogg", "mov"].includes(ext)) {
+                  return (
+                    <video
+                      src={selectedFile.url}
+                      controls
+                      autoPlay
+                      loop
+                      playsInline
+                      className="w-full h-full object-contain rounded-2xl"
+                    />
+                  );
+                }
+                if (ext === "pdf") {
+                  return (
+                    <iframe
+                      src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
+                        selectedFile.url
+                      )}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
+                      className="w-full h-full border-0 rounded-2xl"
+                      allowFullScreen
+                    />
+                  );
+                }
+                return (
+                  <div className="h-full flex items-center justify-center text-white/80">
+                    <FileIcon size={80} />
+                    <p className="mt-6 text-2xl">Preview not available</p>
+                  </div>
+                );
+              })()}
+            </div>
+          </motion.div>
         )}
       </ReactModal>
 
+      {/* Delete Confirmation */}
       <ReactModal
         isOpen={confirmDelete.open}
         onRequestClose={() => setConfirmDelete({ open: false, fileId: null })}
@@ -533,9 +663,8 @@ function FolderDetail() {
             Delete File?
           </h2>
           <p className="text-sm text-gray-500 mb-5">
-            Are you sure you want to permanently delete this file?
+            This action cannot be undone.
           </p>
-
           <div className="flex justify-center gap-3">
             <button
               onClick={() => setConfirmDelete({ open: false, fileId: null })}
@@ -552,17 +681,6 @@ function FolderDetail() {
           </div>
         </div>
       </ReactModal>
-      {printPreview.open && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="flex justify-between items-center bg-gray-900 text-white p-3">
-              <h3 className="text-lg font-semibold">Print Preview</h3>
-            </div>
-
-            <div className="flex justify-center gap-4 bg-gray-100 p-4 border-t"></div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
