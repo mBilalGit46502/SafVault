@@ -448,7 +448,7 @@ function FolderDetail() {
               layout
               key={file._id}
               id={file._id}
-              className="relative bg-white w-[150px] sm:w-[170px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between"
+              className="relative bg-white w-[140px] sm:w-[170px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between"
             >
               <div
                 onClick={() =>
