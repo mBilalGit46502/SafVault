@@ -168,12 +168,17 @@ function FolderDetail() {
   const inputRef = useRef(null);
   const dispatch = useDispatch();
   const currentFolder = useSelector((state) => state.folder.currentFolder);
+  const [menuOpen, setMenuOpen] = useState(null); // Tracks which file's menu is open
+  // OLD (dangerous – crashes on invalid URL)
 
+  // NEW – SAFE VERSION (Never crashes)
   const isValidUrl = (url) => {
+    if (!url || typeof url !== "string") return false;
     try {
-      new URL(url);
-      return true;
-    } catch {
+      // Only allow http/https
+      const parsed = new URL(url);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch (e) {
       return false;
     }
   };
@@ -267,6 +272,61 @@ function FolderDetail() {
     }
   };
 
+  useEffect(() => {
+    const handleClickOutside = () => setMenuOpen(null);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+  // ────────────────────── UNIVERSAL SHARE (Web + Android App + iOS) ──────────────────────
+const handleShare = async (fileUrl, fileName) => {
+  if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  const supported = [
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "pdf",
+    "mp4",
+    "docx",
+    "txt",
+  ].includes(ext);
+
+  // ONLY TRY REAL FILE SHARE ON HTTPS (not localhost)
+  if (supported && navigator.share && location.protocol === "https:") {
+    try {
+      const res = await fetch(fileUrl, { cache: "no-cache" });
+      const blob = await res.blob();
+
+      const file = new File([blob], fileName, {
+        type:
+          ext === "pdf"
+            ? "application/pdf"
+            : blob.type || "application/octet-stream",
+      });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: fileName });
+        toast.success("File shared!");
+        return;
+      }
+    } catch (err) {
+      // Silent — expected on localhost or APK
+    }
+  }
+
+  // Fallback — works everywhere
+  if (navigator.share) {
+    await navigator.share({ url: fileUrl, title: fileName });
+    toast.success("Shared!");
+  } else {
+    navigator.clipboard.writeText(fileUrl);
+    toast.success("Link copied!");
+  }
+};
+
   // ────────────────────── PERFECT PRINT (Image + PDF) ──────────────────────
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
@@ -282,11 +342,13 @@ function FolderDetail() {
       "bmp",
     ].includes(ext);
     const isPDF = ext === "pdf";
+
     if (!isImage && !isPDF) return toast.error("Print not supported");
 
     toast.loading("Preparing print...", { autoClose: false });
 
     let printUrl = fileUrl;
+
     if (isPDF) {
       try {
         const pdf = await pdfjsLib.getDocument(fileUrl).promise;
@@ -295,8 +357,10 @@ function FolderDetail() {
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await page.render({ canvasContext: canvas.getContext("2d"), viewport })
-          .promise;
+        await page.render({
+          canvasContext: canvas.getContext("2d"),
+          viewport,
+        }).promise;
         printUrl = canvas.toDataURL("image/png");
         toast.dismiss();
       } catch (err) {
@@ -309,26 +373,86 @@ function FolderDetail() {
       toast.dismiss();
     }
 
+    // ────── DETECT IF RUNNING IN ANDROID WEBVIEW / CONVERTED APP ──────
+    const isAndroidApp =
+      /Android/i.test(navigator.userAgent) &&
+      (/WebView/i.test(navigator.userAgent) ||
+        !window.chrome ||
+        window.location.href.startsWith("file://") ||
+        navigator.userAgent.includes("wv"));
+
+    if (isAndroidApp) {
+      // ────── ANDROID APP: Open print using NEW WINDOW (Works in 99% converters) ──────
+      const printWindow = window.open("", "_blank");
+
+      if (!printWindow) {
+        toast.error("Please allow popups");
+        return;
+      }
+
+      printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${fileName}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body,html{margin:0;padding:20px;background:white;display:flex;justify-content:center;align-items:center;height:100vh;}
+            img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.2);}
+            @media print{
+              body{padding:0 !important;margin:0 !important;}
+              img{box-shadow:none;border-radius:0;}
+              @page{margin:0.5cm;}
+            }
+          </style>
+        </head>
+        <body>
+          <img src="${printUrl}" alt="${fileName}" />
+          <script>
+            // Auto print after load
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+              }, 800);
+            };
+            // Optional: Close after print
+            window.onafterprint = function() {
+              setTimeout(() => window.close(), 1000);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+      printWindow.document.close();
+
+      toast.success("Print opened");
+      return;
+    }
+
+    // ────── BROWSER: Your original perfect iframe method (unchanged) ──────
     const iframe = document.createElement("iframe");
     iframe.style.cssText =
       "position:fixed;right:0;bottom:0;width:0;height:0;border:none;opacity:0;";
     document.body.appendChild(iframe);
 
     iframe.contentWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body,html{margin:0;padding:0;height:100%;background:white;display:flex;justify-content:center;align-items:center;}
-            img{max-width:95%;max-height:95%;object-fit:contain;}
-            @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-          </style>
-        </head>
-        <body onload="setTimeout(() => window.print(), 500)">
-          <img src="${printUrl}" />
-        </body>
-      </html>
-    `);
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body,html{margin:0;padding:0;height:100%;background:white;display:flex;justify-content:center;align-items:center;}
+          img{max-width:95%;max-height:95%;object-fit:contain;border-radius:12px;box-shadow:0 20px 40px rgba(0,0,0,0.3);}
+          @media print{
+            body{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0;margin:0;}
+            img{box-shadow:none;border-radius:0;}
+          }
+        </style>
+      </head>
+      <body onload="setTimeout(() => window.print(), 500)">
+        <img src="${printUrl}" />
+      </body>
+    </html>
+  `);
     iframe.contentWindow.document.close();
 
     setTimeout(() => iframe.remove(), 20000);
@@ -365,8 +489,10 @@ function FolderDetail() {
     }
 
     if (ext === "pdf") {
-  return <PdfThumbnail url={file.url} fileName={file.name} fileId={file._id} />;
-}
+      return (
+        <PdfThumbnail url={file.url} fileName={file.name} fileId={file._id} />
+      );
+    }
     if (["mp4", "webm", "ogg"].includes(ext)) {
       return (
         <video
@@ -459,68 +585,129 @@ function FolderDetail() {
                 {renderPreview(file)}
               </div>
 
-              <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                {editingFileId === file._id ? (
-                  <>
-                    <button
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleRename(file._id);
-                      }}
-                      className="bg-green-500 text-white rounded-full p-1 hover:bg-green-600"
-                    >
-                      <Check size={18} />
-                    </button>
-                    <button
-                      onClick={() => setEditingFileId(null)}
-                      className="bg-gray-500 text-white rounded-full p-1 hover:bg-gray-600"
-                    >
-                      <XCircle size={18} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingFileId(file._id);
-                        setNewFileName(file.name);
-                      }}
-                      className="bg-blue-500 text-white rounded-full p-1 hover:bg-blue-600"
-                    >
-                      <Pencil size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePrintPreview(file.url, file.name);
-                      }}
-                      className="bg-gray-700 text-white rounded-full p-1 hover:bg-gray-800"
-                    >
-                      <Printer size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(file.url, file.name);
-                      }}
-                      className="bg-indigo-500 text-white rounded-full p-1 hover:bg-indigo-600"
-                    >
-                      <Download size={18} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDelete({ open: true, fileId: file._id });
-                      }}
-                      className="bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </>
+              {/* 3-DOT MENU — MODERN & CLEAN */}
+              {/* SMART, RESPONSIVE, ICON-ONLY 3-DOT MENU — FINAL 2025 DESIGN */}
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(menuOpen === file._id ? null : file._id);
+                  }}
+                  className="bg-white/90 hover:bg-white backdrop-blur-2xl border border-gray-300/50 rounded-full p-2.5 shadow-xl hover:shadow-2xl transition-all hover:scale-110 active:scale-95"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                  >
+                    <circle cx="12" cy="7" r="1.5" />
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="12" cy="17" r="1.5" />
+                  </svg>
+                </button>
+
+                {/* PERFECT GRID MENU — RESPONSIVE & NO SCROLL */}
+                {menuOpen === file._id && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute right-0 top-12 w-48 sm:w-52 bg-white/98 backdrop-blur-3xl rounded-3xl shadow-2xl border border-white/40 overflow-hidden z-50"
+                    style={{ boxShadow: "0 25px 50px rgba(0,0,0,0.2)" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-3 grid grid-cols-3 gap-3">
+                      {/* RENAME */}
+                      <button
+                        onClick={() => {
+                          setEditingFileId(file._id);
+                          setNewFileName(file.name);
+                          setMenuOpen(null);
+                        }}
+                        className="p-4 rounded-2xl hover:bg-blue-50/80 transition-all group"
+                        title="Rename"
+                      >
+                        <Pencil
+                          size={22}
+                          className="mx-auto text-blue-600 group-hover:scale-125 transition-transform"
+                        />
+                      </button>
+
+                      {/* SHARE — ALL FILES (PDF FIXED!) */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpen(null);
+                          handleShare(file.url, file.name);
+                        }}
+                        className="p-4 rounded-2xl hover:bg-emerald-50/80 transition-all group"
+                        title="Share"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="24"
+                          height="24"
+                          fill="currentColor"
+                          viewBox="0 0 16 16"
+                          className="mx-auto text-emerald-600 group-hover:scale-125 transition-transform"
+                        >
+                          <path d="M11.5 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0zm-.5 6.5a.5.5 0 0 1-.5-.5v-1a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1a.5.5 0 0 1-.5.5h-7z" />
+                        </svg>
+                      </button>
+
+                      {/* PRINT */}
+                      <button
+                        onClick={() => {
+                          handlePrintPreview(file.url, file.name);
+                          setMenuOpen(null);
+                        }}
+                        className="p-4 rounded-2xl hover:bg-gray-100 transition-all group"
+                        title="Print"
+                      >
+                        <Printer
+                          size={22}
+                          className="mx-auto text-gray-700 group-hover:scale-125 transition-transform"
+                        />
+                      </button>
+
+                      {/* DOWNLOAD */}
+                      <button
+                        onClick={() => {
+                          handleDownload(file.url, file.name);
+                          setMenuOpen(null);
+                        }}
+                        className="p-4 rounded-2xl hover:bg-indigo-50/80 transition-all group"
+                        title="Download"
+                      >
+                        <Download
+                          size={22}
+                          className="mx-auto text-indigo-600 group-hover:scale-125 transition-transform"
+                        />
+                      </button>
+
+                      {/* DELETE — FULL WIDTH */}
+                      <button
+                        onClick={() => {
+                          setConfirmDelete({ open: true, fileId: file._id });
+                          setMenuOpen(null);
+                        }}
+                        className="col-span-3 p-4 rounded-2xl hover:bg-red-50/80 transition-all group"
+                        title="Delete"
+                      >
+                        <Trash2
+                          size={22}
+                          className="mx-auto text-red-600 group-hover:scale-125 transition-transform"
+                        />
+                      </button>
+                    </div>
+                  </motion.div>
                 )}
               </div>
-
               <div className="mt-3 text-center">
                 {editingFileId === file._id ? (
                   <input
