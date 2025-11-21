@@ -17,6 +17,8 @@ import {
   Folder as FolderIcon,
   Printer,
   Download,
+  Share2,
+  MoreVertical,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -25,7 +27,7 @@ import SummaryApi from "../api/SummaryApi";
 import FileUpload from "../components/FileUpload";
 import { useDispatch, useSelector } from "react-redux";
 import { addFileToFolder, setCurrentFolder } from "../storeSlices/folderSlice";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ────────────────────── PDF.js Setup (Vite 2025) ──────────────────────
 import * as pdfjsLib from "pdfjs-dist";
@@ -152,6 +154,32 @@ const PdfThumbnail = ({ url, fileName, fileId }) => {
 // ────────────────────── MAIN COMPONENT ──────────────────────
 ReactModal.setAppElement("#root");
 
+const ActionButton = ({
+  onClick,
+  title,
+  icon: Icon,
+  color,
+  fullWidth = false,
+}) => (
+  <button
+    onClick={onClick}
+    title={title}
+    className={`${
+      fullWidth ? "col-span-2 sm:col-span-3" : "col-span-1"
+    } p-2 rounded-xl hover:bg-gray-50/70 transition-all group flex  items-center justify-center text-center`}
+  >
+    <div className="p-1.5 rounded-full bg-white transition-all group-hover:bg-opacity-0">
+      <Icon
+        size={12}
+        className={`mx-auto ${color} transition-transform group-hover:scale-110`}
+      />
+    </div>
+    {/* Label visible on small screens (mobile UX improvement) */}
+    <span className="text-xs mt-1 text-gray-500 font-medium hidden sm:block">
+      {title}
+    </span>
+  </button>
+);
 function FolderDetail() {
   const { id } = useParams();
   const [files, setFiles] = useState([]);
@@ -586,128 +614,102 @@ const handleShare = async (fileUrl, fileName) => {
               </div>
 
               {/* 3-DOT MENU — MODERN & CLEAN */}
-              {/* SMART, RESPONSIVE, ICON-ONLY 3-DOT MENU — FINAL 2025 DESIGN */}
               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
+                {/* 1. PRIMARY MENU BUTTON (3-Dots) */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenuOpen(menuOpen === file._id ? null : file._id);
                   }}
-                  className="bg-white/90 hover:bg-white backdrop-blur-2xl border border-gray-300/50 rounded-full p-2.5 shadow-xl hover:shadow-2xl transition-all hover:scale-110 active:scale-95"
+                  // Modern, glass-like button styling
+                  className="bg-white/80 hover:bg-white backdrop-blur-md border border-gray-200 rounded-full p-2 shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                  aria-label="Open file actions menu"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  >
-                    <circle cx="12" cy="7" r="1.5" />
-                    <circle cx="12" cy="12" r="1.5" />
-                    <circle cx="12" cy="17" r="1.5" />
-                  </svg>
+                  <MoreVertical size={20} className="text-gray-600" />
                 </button>
 
-                {/* PERFECT GRID MENU — RESPONSIVE & NO SCROLL */}
-                {menuOpen === file._id && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: -10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.18 }}
-                    className="absolute right-0 top-12 w-48 sm:w-52 bg-white/98 backdrop-blur-3xl rounded-3xl shadow-2xl border border-white/40 overflow-hidden z-50"
-                    style={{ boxShadow: "0 25px 50px rgba(0,0,0,0.2)" }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="p-3 grid grid-cols-3 gap-3">
-                      {/* RENAME */}
-                      <button
-                        onClick={() => {
-                          setEditingFileId(file._id);
-                          setNewFileName(file.name);
-                          setMenuOpen(null);
-                        }}
-                        className="p-4 rounded-2xl hover:bg-blue-50/80 transition-all group"
-                        title="Rename"
-                      >
-                        <Pencil
-                          size={22}
-                          className="mx-auto text-blue-600 group-hover:scale-125 transition-transform"
-                        />
-                      </button>
+                {/* 2. MENU DROPDOWN (Uses AnimatePresence for smooth close) */}
+                <AnimatePresence>
+                  {menuOpen === file._id && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.8, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                      // Glass-like container style
+                      className="absolute h-32 p-0 m-0  right-0 top-12  bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-100 overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden z-50 transform-gpu"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        boxShadow:
+                          "0 10px 30px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)",
+                      }}
+                    >
+                      <div className="  flex flex-col items-center p-0 m-0 ">
+                        {/* ACTION BUTTON COMPONENT (Helper structure) */}
+                        {/* The structure below provides better mobile UX by showing labels */}
 
-                      {/* SHARE — ALL FILES (PDF FIXED!) */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuOpen(null);
-                          handleShare(file.url, file.name);
-                        }}
-                        className="p-4 rounded-2xl hover:bg-emerald-50/80 transition-all group"
-                        title="Share"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="24"
-                          height="24"
-                          fill="currentColor"
-                          viewBox="0 0 16 16"
-                          className="mx-auto text-emerald-600 group-hover:scale-125 transition-transform"
-                        >
-                          <path d="M11.5 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0zm-.5 6.5a.5.5 0 0 1-.5-.5v-1a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1a.5.5 0 0 1-.5.5h-7z" />
-                        </svg>
-                      </button>
-
-                      {/* PRINT */}
-                      <button
-                        onClick={() => {
-                          handlePrintPreview(file.url, file.name);
-                          setMenuOpen(null);
-                        }}
-                        className="p-4 rounded-2xl hover:bg-gray-100 transition-all group"
-                        title="Print"
-                      >
-                        <Printer
-                          size={22}
-                          className="mx-auto text-gray-700 group-hover:scale-125 transition-transform"
+                        {/* RENAME */}
+                        <ActionButton
+                          onClick={() => {
+                            setEditingFileId(file._id);
+                            setNewFileName(file.name);
+                            setMenuOpen(null);
+                          }}
+                          // title="Rename"
+                          icon={Pencil}
+                          color="text-blue-600"
                         />
-                      </button>
 
-                      {/* DOWNLOAD */}
-                      <button
-                        onClick={() => {
-                          handleDownload(file.url, file.name);
-                          setMenuOpen(null);
-                        }}
-                        className="p-4 rounded-2xl hover:bg-indigo-50/80 transition-all group"
-                        title="Download"
-                      >
-                        <Download
-                          size={22}
-                          className="mx-auto text-indigo-600 group-hover:scale-125 transition-transform"
+                        {/* SHARE */}
+                        <ActionButton
+                          onClick={() => {
+                            setMenuOpen(null);
+                            handleShare(file.url, file.name);
+                          }}
+                          // title="Share"
+                          icon={Share2}
+                          color="text-emerald-600"
                         />
-                      </button>
 
-                      {/* DELETE — FULL WIDTH */}
-                      <button
-                        onClick={() => {
-                          setConfirmDelete({ open: true, fileId: file._id });
-                          setMenuOpen(null);
-                        }}
-                        className="col-span-3 p-4 rounded-2xl hover:bg-red-50/80 transition-all group"
-                        title="Delete"
-                      >
-                        <Trash2
-                          size={22}
-                          className="mx-auto text-red-600 group-hover:scale-125 transition-transform"
+                        {/* DOWNLOAD */}
+                        <ActionButton
+                          onClick={() => {
+                            handleDownload(file.url, file.name);
+                            setMenuOpen(null);
+                          }}
+                          // title="Download"
+                          icon={Download}
+                          color="text-indigo-600"
                         />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
+
+                        {/* PRINT */}
+                        <ActionButton
+                          onClick={() => {
+                            handlePrintPreview(file.url, file.name);
+                            setMenuOpen(null);
+                          }}
+                          // title="Print"
+                          icon={Printer}
+                          color="text-gray-700"
+                        />
+
+                        {/* DELETE (Full Width for Emphasis) */}
+                        <ActionButton
+                          onClick={() => {
+                            setConfirmDelete({ open: true, fileId: file._id });
+                            setMenuOpen(null);
+                          }}
+                          // title="Delete"
+                          icon={Trash2}
+                          color="text-red-600"
+                          fullWidth
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
               <div className="mt-3 text-center">
                 {editingFileId === file._id ? (
                   <input
