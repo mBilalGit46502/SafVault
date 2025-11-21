@@ -33,6 +33,15 @@ const SummaryApi = {
     url: "/api/auth/getCode",
     method: "get",
   },
+  getTokenSettings: {
+    url: "/api/auth/token-settings",
+    method: "get",
+  },
+
+  updateTokenSettings: {
+    url: "/api/auth/token-settings",
+    method: "put",
+  },
   update_avatar: {
     url: "/api/auth/update-avatar",
     method: "put",

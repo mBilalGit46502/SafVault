@@ -68,7 +68,6 @@ export const registerUser = async (req, res) => {
       emailStatusMessage =
         "User created successfully! Please check your email to get started.";
     } catch (emailError) {
-    
       emailStatusMessage =
         "User created successfully, but there was an issue sending the welcome email.";
     }
@@ -83,20 +82,21 @@ export const registerUser = async (req, res) => {
       data: userData,
     });
   } catch (error) {
-   let errorMessage = "Registration failed.";
+    let errorMessage = "Registration failed.";
 
-        if (error.name === 'ValidationError') {
-            // Extract the specific message from the 'password' field validation error
-            if (error.errors.password) {
-                errorMessage = error.errors.password.message; // This will use the 'Password must be at least 8 characters long.' message
-            }
-        } else if (error.code === 11000) {
-            // Handle duplicate key error (e.g., email already exists)
-            errorMessage = "Email address is already in use.";
-        }
+    if (error.name === "ValidationError") {
+      // Extract the specific message from the 'password' field validation error
+      if (error.errors.password) {
+        errorMessage = error.errors.password.message; // This will use the 'Password must be at least 8 characters long.' message
+      }
+    } else if (error.code === 11000) {
+      // Handle duplicate key error (e.g., email already exists)
+      errorMessage = "Email address is already in use.";
+    }
 
-        res.status(400).json({ success: false, error: true, message: errorMessage });
-    
+    res
+      .status(400)
+      .json({ success: false, error: true, message: errorMessage });
   }
 };
 
@@ -425,7 +425,7 @@ export const resetPassword = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        error:true,
+        error: true,
         message:
           "Invalid token. The link is either incorrect or has already been used.",
         errorType: "INVALID_TOKEN", // For frontend to show specific message/link
@@ -433,14 +433,13 @@ export const resetPassword = async (req, res) => {
     } // 3. Token Expiration Check (Time-based failure)
 
     if (user.resetPasswordExpires < Date.now().toLocaleString()) {
-  
       user.resetPasswordToken = undefined;
       user.resetPasswordExpires = undefined;
       await user.save();
 
       return res.status(401).json({
         success: false,
-        error:true,
+        error: true,
         message:
           "This password reset link has expired. Your password was NOT changed.",
         errorType: "EXPIRED_TOKEN", // CRITICAL: For frontend detection
@@ -459,7 +458,7 @@ export const resetPassword = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      error:false,
+      error: false,
       message:
         "Password successfully reset! You can now log in with your new password.",
     });
@@ -467,7 +466,7 @@ export const resetPassword = async (req, res) => {
     console.error("Server error during password reset:", error);
     return res.status(500).json({
       success: false,
-      error:false,
+      error: false,
       message: "A server error occurred during password reset.",
     });
   }
@@ -477,15 +476,11 @@ const MAX_PASSWORD_LENGTH = 30;
 const MIN_PASSWORD_LENGTH = 8;
 const SECRET_KEY = process.env.JWT_SECRET; // Your JWT Secret Key
 
-
 export const changePassword = async (req, res) => {
   try {
-    
-    const {userId} = req.userId;
+    const { userId } = req.userId;
 
-  
     const { currentPassword, newPassword } = req.body;
-
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
@@ -514,14 +509,12 @@ export const changePassword = async (req, res) => {
     // 4. Find the user
     const user = await User.findById(userId);
     if (!user) {
-   
       return res.status(404).json({
         message: "User not found.",
         success: false,
       });
     }
 
-    
     const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
@@ -539,7 +532,6 @@ export const changePassword = async (req, res) => {
     user.password = hashedNewPassword;
     await user.save();
 
-    
     res.status(200).json({
       message: "Password changed successfully. Please log in again.",
       success: true,
@@ -550,6 +542,84 @@ export const changePassword = async (req, res) => {
       message: "An error occurred while changing the password.",
       error: error.message,
       success: false,
+    });
+  }
+};
+
+
+export const getTokenSettings = async (req, res) => {
+  try {
+    const {userId}=req.userId
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      allowDownload: user.allowTokenDownload !== undefined ? user.allowTokenDownload : true
+    });
+  } catch (error) {
+    console.error("Get Token Settings Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+export const updateTokenSettings = async (req, res) => {
+  try {
+    const { allowDownload } = req.body;
+    const {userId} = req.userId; // From your auth middleware (decoded JWT)
+
+    // 1. Validate user ID
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Invalid token",
+      });
+    }
+
+    // 2. Validate input
+    if (typeof allowDownload !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid request: allowDownload must be true or false",
+      });
+    }
+
+    // 3. Update the setting
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { allowTokenDownload: allowDownload },
+      { new: true } // Returns updated document
+    ).select("allowTokenDownload");
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 4. Success response — instantly reflected in frontend
+    return res.status(200).json({
+      success: true,
+      message: `Downloads ${
+        allowDownload ? "enabled" : "disabled"
+      } successfully`,
+      allowDownload: updatedUser.allowTokenDownload,
+    });
+  } catch (error) {
+    console.error("updateTokenSettings Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error. Please try again.",
     });
   }
 };

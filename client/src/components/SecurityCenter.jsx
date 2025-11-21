@@ -29,6 +29,7 @@ import {
   Key,
   Laptop,
   Lock,
+  Download,
 } from "lucide-react";
 import { tokenValues, logoutUser } from "../storeSlices/userSlice";
 import { useDispatch, useSelector } from "react-redux";
@@ -67,7 +68,8 @@ export default function SecurityCenter({
   const [showCurrentPass, setShowCurrentPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
-
+  const [allowDownload, setAllowDownload] = useState(true);
+  const [downloadLoading, setDownloadLoading] = useState(false);
   const [generatedLogId, setGeneratedLogId] = useState("");
   const smallLoader = <Loader2 className="animate-spin w-4 h-4" />;
 
@@ -78,6 +80,40 @@ export default function SecurityCenter({
       return null;
     }
   };
+  const fetchDownloadSetting = async () => {
+    try {
+      const res = await Axios({ ...SummaryApi.getTokenSettings });
+      if (res?.data?.success) {
+        setAllowDownload(res.data.allowDownload);
+      }
+    } catch (err) {
+      console.log("Could not load download setting");
+    }
+  };
+
+  const handleToggleDownload = async () => {
+    const newValue = !allowDownload;
+    setDownloadLoading(true);
+    try {
+      const res = await Axios({
+        ...SummaryApi.updateTokenSettings,
+        data: { allowDownload: newValue },
+      });
+      if (res?.data?.success) {
+        setAllowDownload(newValue);
+        toast.success(
+          `Downloads ${newValue ? "enabled" : "disabled"} for token users`
+        );
+      } else {
+        toast.error("Failed to update");
+      }
+    } catch (err) {
+      toast.error("Update failed");
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
   const handlePasswordFormChange = useCallback((field, value) => {
     setPasswordForm((prevForm) => ({
       ...prevForm,
@@ -196,6 +232,62 @@ export default function SecurityCenter({
     }
   };
 
+  // const handleApproveReject = async (id, action) => {
+  //   const confirm = await Swal.fire({
+  //     title: `${action === "approve" ? "Approve" : "Reject"} device?`,
+  //     text:
+  //       action === "approve"
+  //         ? "This will grant access to the device."
+  //         : "This will remove the pending device request.",
+  //     icon: "question",
+  //     showCancelButton: true,
+  //     confirmButtonText: action === "approve" ? "Yes, approve" : "Yes, reject",
+  //     confirmButtonColor: action === "approve" ? "#10B981" : "#EF4444",
+  //   });
+
+  //   if (!confirm.isConfirmed) return;
+
+  //   setBusyAction(id);
+  //   try {
+  //     const res = await Axios({
+  //       ...SummaryApi.UpdateDevicesStatus(id),
+  //       data: { action },
+  //     });
+
+  //     // SUCCESS RESPONSE
+  //     if (res.data.success) {
+  //       toast.success(
+  //         `Device ${
+  //           action === "approve" ? "approved" : "rejected"
+  //         } successfully!`
+  //       );
+
+  //       // THIS IS THE MAGIC FIX
+  //       if (action === "approve" && res.data.newToken) {
+  //         // Save fresh token so user stays logged in
+  //         localStorage.setItem("token", res.data.newToken);
+
+  //         // If you use Redux (optional)
+  //         // dispatch(setToken(res.data.newToken)); // or loginSuccess(...)
+  //       }
+
+  //       // Update UI
+  //       if (action === "approve") {
+  //         setPendingDevices((prev) => prev.filter((d) => d._id !== id));
+  //         await fetchApproved();
+  //       } else {
+  //         setPendingDevices((prev) => p.filter((d) => d._id !== id));
+  //       }
+  //     } else {
+  //       toast.error(res.data.message || "Action failed");
+  //     }
+  //   } catch (err) {
+  //     console.error("Approve/Reject error:", err);
+  //     Swal.fire("Error", "Failed to process. Try again.", "error");
+  //   } finally {
+  //     setBusyAction(null);
+  //   }
+  // };
   const handleForceLogout = async (deviceId) => {
     const confirm = await Swal.fire({
       title: "Force logout device?",
@@ -448,6 +540,7 @@ export default function SecurityCenter({
       fetchApproved(),
       fetchFolders(),
       fetchSelectedFolders(),
+      fetchDownloadSetting(),
     ];
 
     Promise.all([...mandatoryPromises]).finally(() => setLoading(false));
@@ -880,22 +973,22 @@ export default function SecurityCenter({
                             : "No token found. Click Regenerate to create one."
                         }
                         className={`
-      w-full py-3 sm:py-4 pl-4 
-      
-      // 💡 KEY FIX: Allow horizontal scrolling and prevent wrap
-      overflow-x-auto whitespace-nowrap overflow-y-hidden 
-      
-      // Adjusted padding for button group visibility
-      pr-24 sm:pr-28 
-      
-      text-sm font-mono rounded-xl transition-all duration-200
-      cursor-text // Allow cursor to show interaction
-      ${
-        isDark
-          ? "bg-gray-700 border border-gray-600 text-gray-200"
-          : "bg-gray-50 border border-gray-300 text-gray-700"
-      }
-    `}
+                      w-full py-3 sm:py-4 pl-4 
+                      
+                      // 💡 KEY FIX: Allow horizontal scrolling and prevent wrap
+                      overflow-x-auto whitespace-nowrap overflow-y-hidden 
+                      
+                      // Adjusted padding for button group visibility
+                      pr-24 sm:pr-28 
+                      
+                      text-sm font-mono rounded-xl transition-all duration-200
+                      cursor-text // Allow cursor to show interaction
+                      ${
+                        isDark
+                          ? "bg-gray-700 border border-gray-600 text-gray-200"
+                          : "bg-gray-50 border border-gray-300 text-gray-700"
+                      }
+                    `}
                       />
 
                       {/* The button container ensures buttons are always on the right */}
@@ -931,6 +1024,41 @@ export default function SecurityCenter({
                         )}
                       </div>
                     </div>
+                    <div className="relative p-6 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/20 border-2 border-orange-300 dark:border-orange-700">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="text-center sm:text-left">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Download size={24} className="text-orange-600" />
+                            <h4 className="font-bold text-lg">
+                              Allow File Downloads
+                            </h4>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 max-w-md">
+                            {allowDownload
+                              ? "Token users can download files from shared folders"
+                              : "Token users can only view files (download blocked)"}
+                          </p>
+                        </div>
+
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={allowDownload}
+                            onChange={handleToggleDownload}
+                            disabled={downloadLoading}
+                            className="sr-only peer"
+                          />
+                          <div className="w-14 h-8 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-600 peer-disabled:opacity-70"></div>
+                          <span className="ml-3 text-sm font-medium">
+                            {downloadLoading
+                              ? "Saving..."
+                              : allowDownload
+                              ? "ON"
+                              : "OFF"}
+                          </span>
+                        </label>
+                      </div>
+                    </div>
 
                     <div
                       className="flex lg:ms-[450px]
@@ -942,15 +1070,15 @@ export default function SecurityCenter({
                         disabled={loading}
                         className={`
 
-    flex w-fit space-x-2 px-4 py-2 rounded-lg 
-    font-bold text-xs shadow-md transition-all duration-300
-    ${
-      loading
-        ? "bg-gray-400 text-gray-700 cursor-not-allowed shadow-none"
-        : // 💡 Smart Color: High-trust Blue Gradient
-          "bg-gradient-to-r  from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-blue-500/50 hover:shadow-blue-500/70 text-white"
-    }
-  `}
+                        flex w-fit space-x-2 px-4 py-2 rounded-lg 
+                        font-bold text-xs shadow-md transition-all duration-300
+                        ${
+                          loading
+                            ? "bg-gray-400 text-gray-700 cursor-not-allowed shadow-none"
+                            : // 💡 Smart Color: High-trust Blue Gradient
+                              "bg-gradient-to-r  from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-blue-500/50 hover:shadow-blue-500/70 text-white"
+                        }
+                      `}
                       >
                         {/* Content based on State (Loading vs. Token Exists vs. No Token) */}
                         {loading ? (
@@ -1016,6 +1144,7 @@ export default function SecurityCenter({
                 </div>
               </motion.div>
             )}
+
             {tab === "password" && (
               <motion.div
                 key="password"

@@ -76,7 +76,7 @@ export const LoginWithToken = async (req, res) => {
     const cookiesOption = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
+      // sameSite: "strict",
       maxAge: 60 * 60 * 1000,
     };
     res.cookie("tokenLogin", accessToken, cookiesOption);
@@ -210,6 +210,65 @@ export const updateDeviceStatus = async (req, res) => {
     });
   }
 };
+
+// export const updateDeviceStatus = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { action } = req.body; // "approve" or "reject"
+//     const {userId} = req.userId; // ← Make sure your auth middleware sets req.user.id
+
+//     const device = await TokenLog.findById(id).populate(
+//       "linkedUser",
+//       "email username"
+//     );
+
+//     if (!device) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Device not found" });
+//     }
+
+//     // REJECT → just delete
+//     if (action === "reject") {
+//       await TokenLog.findByIdAndDelete(id);
+//       return res.status(200).json({
+//         success: true,
+//         message: "Device rejected and removed",
+//       });
+//     }
+
+//     // APPROVE → MAIN FIX HERE
+//     if (action === "approve") {
+//       device.isApproved = true;
+//       device.approvedAt = new Date();
+//       device.approvedBy = userId;
+//       await device.save();
+
+//       // THIS IS THE MAGIC: GENERATE A FRESH JWT TOKEN
+//       const freshToken = generateJwtToken({
+//         id: device.linkedUser._id,
+//         email: device.linkedUser.email,
+//         username: device.linkedUser.username,
+//         // include any other user data you need
+//       });
+
+//       return res.status(200).json({
+//         success: true,
+//         message: `Device approved for ${device.linkedUser.username}`,
+//         newToken: freshToken, // ← THIS FIXES THE REDIRECT-TO-LOGIN BUG
+//       });
+//     }
+
+//     return res.status(400).json({ success: false, message: "Invalid action" });
+//   } catch (error) {
+//     console.error("Device approval error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to update device status",
+//       error: error.message,
+//     });
+//   }
+// };
 
 export const GetUpdateDevice = async (req, res) => {
   try {
@@ -560,7 +619,9 @@ export const GetUpdateTokenFolder = async (req, res) => {
     const ownerId = tokenSession.linkedUser._id;
 
     // ✅ Step 3: Fetch the selected folders of the owner
-    const owner = await User.findById(ownerId).select("selectedFolders");
+    const owner = await User.findById(ownerId).select(
+      "username email selectedFolders allowTokenDownload"
+    );
     if (!owner)
       return res.status(404).json({
         success: false,
@@ -607,6 +668,7 @@ export const GetUpdateTokenFolder = async (req, res) => {
         username: tokenSession.linkedUser.username,
         email: tokenSession.linkedUser.email,
       },
+      allowDownload: owner.allowTokenDownload === true,
       data: grouped,
     });
   } catch (error) {

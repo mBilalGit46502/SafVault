@@ -7,33 +7,39 @@ import SummaryApi from "../../api/SummaryApi";
 import TokenFolders from "./TokenFolders";
 import { jwtDecode } from "jwt-decode";
 
-
 function UserDashboard() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
   const navigate = useNavigate();
   const intervalRef = useRef(null);
 
-  const clearAllUserData = () => {
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-      document.cookie.split(";").forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, "")
-          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-      });
-    } catch (error) {
-      console.error(" Error clearing user data:", error);
-    }
-  };
+  // ────────────────────── UNIFIED LOGOUT (CALLS BACKEND + CLEARS LOCAL) ──────────────────────
+  const performFullLogout = async (
+    reason = "Session expired or logged out."
+  ) => {
+    const token = localStorage.getItem("tokenLogin");
 
-  const forceLogout = async (reason = "Session expired or invalid.") => {
-    try {
-      await Axios({ ...SummaryApi.UserLogoutAndRemove });
-    } catch (e) {
-      console.warn("Backend logout failed:", e);
+    // 1. Call backend to remove this device from approved list
+    if (token) {
+      try {
+        await Axios({
+          ...SummaryApi.UserLogoutAndRemove,
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (err) {
+        console.warn("Backend logout failed (might already be invalid):", err);
+      }
     }
-    clearAllUserData();
+
+    // 2. Clear all local data
+    localStorage.clear();
+    sessionStorage.clear();
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+
+    // 3. Show message & redirect
     Swal.fire({
       title: "Logged Out",
       text: reason,
@@ -42,67 +48,65 @@ function UserDashboard() {
       timer: 2000,
       showConfirmButton: false,
     });
-    navigate("/login", { replace: true });
+
+    navigate("/userlogin", { replace: true });
   };
 
-  const checkSessionValidity = async () => {
-    const token = localStorage.getItem("tokenLogin");
-    if (!token) {
-      forceLogout("No session found. Please log in again.");
-      return;
-    }
-
-    try {
-      const response = await Axios({
-        ...SummaryApi.GetUserById,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = response.data;
-
-      if (!data.success) {
-        forceLogout(data.message || "Session invalid.");
-      }
-    } catch (err) {
-      console.error("Session check failed:", err);
-      const status = err.response?.status;
-      if (status === 401) {
-        forceLogout("Session expired. Please log in again.");
-      } else if (status === 403) {
-        forceLogout("You were force logged out by admin.");
-      } else if (status === 404) {
-        forceLogout("User not found or deleted.");
-      }
-    }
-  };
-
-
-useEffect(() => {
-  const token = localStorage.getItem("tokenLogin");
-  if (token) {
-    try {
-      const decoded = jwtDecode(token);
-      if (decoded.exp * 1000 < Date.now()) {
-        console.log("Token expired, clearing...");
-        localStorage.clear();
-        sessionStorage.clear();
-        navigate("/userlogin");
-      }
-    } catch (err) {
-      console.error("Invalid token:", err);
-      localStorage.clear();
-      sessionStorage.clear();
-      navigate("/userlogin");
-    }
-  }
-}, []);
-
-
+  // ────────────────────── TOKEN EXPIRY CHECK (NOW CALLS FULL LOGOUT) ──────────────────────
   useEffect(() => {
-    checkSessionValidity();
+    const checkTokenExpiry = () => {
+      const token = localStorage.getItem("tokenLogin");
+      if (!token) {
+        performFullLogout("No session found.");
+        return;
+      }
 
+      try {
+        const decoded = jwtDecode(token);
+        if (decoded.exp * 1000 < Date.now()) {
+          performFullLogout("Session expired. Please log in again.");
+        }
+      } catch (err) {
+        performFullLogout("Invalid session token.");
+      }
+    };
+
+    checkTokenExpiry(); // Check immediately
+    const interval = setInterval(checkTokenExpiry, 5000); // Every 5 sec
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ────────────────────── SESSION VALIDATION (KEEP BUT SIMPLIFY) ──────────────────────
+  useEffect(() => {
+    const checkSessionValidity = async () => {
+      const token = localStorage.getItem("tokenLogin");
+      if (!token) return;
+
+      try {
+        const response = await Axios({
+          ...SummaryApi.GetUserById,
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.data.success) {
+          performFullLogout(response.data.message || "Session invalid.");
+        }
+      } catch (err) {
+        const status = err.response?.status;
+        if (status === 401 || status === 403 || status === 404) {
+          performFullLogout(
+            status === 401
+              ? "Session expired."
+              : status === 403
+              ? "Force logged out by admin."
+              : "Account not found."
+          );
+        }
+      }
+    };
+
+    checkSessionValidity();
     intervalRef.current = setInterval(checkSessionValidity, 10000);
 
     return () => clearInterval(intervalRef.current);
@@ -111,7 +115,7 @@ useEffect(() => {
   return (
     <>
       <TokenHeader theme={theme} setTheme={setTheme} />
-      <TokenFolders/>
+      <TokenFolders />
       <Outlet />
     </>
   );

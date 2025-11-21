@@ -44,3 +44,17 @@
 .group:hover .group-hover\:opacity-100 {
   opacity: 1 !important;
 }
+/* In your global stylesheet (e.g., globals.css) */
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+  /* Hide scrollbar in Chrome, Safari, Edge */
+  width: 0 !important;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  /* Hide scrollbar in IE/Edge legacy */
+  scrollbar-width: none;
+  /* Hide scrollbar in Firefox */
+}

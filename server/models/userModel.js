@@ -14,7 +14,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      minlength: [8, 'Password must be at least 8 characters long.'],
+      minlength: [8, "Password must be at least 8 characters long."],
       required: true,
     },
     resetPasswordToken: {
@@ -29,7 +29,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-
+    allowTokenDownload: {
+      type: Boolean,
+      default: false, 
+    },
     avatar: {
       url: String,
       filename: String,

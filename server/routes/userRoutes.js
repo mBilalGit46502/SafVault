@@ -1,5 +1,5 @@
 import express from "express"
-import { changePassword, forgetPassword, getTokenCode, loginUser, logoutUser, registerUser, resetPassword, saveTokenCode, uploadAvatar } from "../controllers/userController.js"
+import { changePassword, forgetPassword, getTokenCode, getTokenSettings, loginUser, logoutUser, registerUser, resetPassword, saveTokenCode, updateTokenSettings, uploadAvatar } from "../controllers/userController.js"
 import { authUser } from "../middleware/authUser.js"
 import upload from "../utils/cloudinary.js"
 
@@ -13,6 +13,8 @@ router.post("/change-password",authUser,changePassword)
 router.post("/logout",authUser,logoutUser)
 router.post("/code",authUser,saveTokenCode)
 router.get("/getCode",authUser,getTokenCode)
+router.get("/token-settings", authUser, getTokenSettings);
+router.put("/token-settings", authUser, updateTokenSettings);
 router.put("/update-avatar",authUser,upload.single("avatar"),uploadAvatar)
 
 
