@@ -1024,39 +1024,106 @@ export default function SecurityCenter({
                         )}
                       </div>
                     </div>
-                    <div className="relative p-6 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/20 border-2 border-orange-300 dark:border-orange-700">
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="text-center sm:text-left">
-                          <div className="flex items-center gap-3 mb-2">
-                            <Download size={24} className="text-orange-600" />
-                            <h4 className="font-bold text-lg">
-                              Allow File Downloads
-                            </h4>
-                          </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-300 max-w-md">
-                            {allowDownload
-                              ? "Token users can download files from shared folders"
-                              : "Token users can only view files (download blocked)"}
-                          </p>
-                        </div>
 
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={allowDownload}
-                            onChange={handleToggleDownload}
-                            disabled={downloadLoading}
-                            className="sr-only peer"
-                          />
-                          <div className="w-14 h-8 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-600 peer-disabled:opacity-70"></div>
-                          <span className="ml-3 text-sm font-medium">
-                            {downloadLoading
-                              ? "Saving..."
-                              : allowDownload
-                              ? "ON"
-                              : "OFF"}
-                          </span>
-                        </label>
+                    <div className="w-full max-w-3xl mx-auto p-3 sm:p-4">
+                      <div
+                        className="relative rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300
+    bg-white/80 dark:bg-gray-900/90 backdrop-blur-sm
+    border border-gray-200 dark:border-gray-700"
+                      >
+                        {/* Subtle Gradient Background */}
+                        <div
+                          className="absolute inset-0 bg-gradient-to-r from-orange-50/50 to-amber-50/30 
+      dark:from-orange-900/20 dark:to-amber-900/10"
+                        ></div>
+
+                        <div className="relative p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6">
+                          {/* Left: Icon + Text */}
+                          <div className="flex items-center gap-4 flex-1">
+                            {/* Icon Circle */}
+                            <div
+                              className="p-3 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 
+          shadow-lg shadow-orange-500/30 dark:shadow-orange-600/40"
+                            >
+                              <Download size={22} className="text-white" />
+                            </div>
+
+                            {/* Text */}
+                            <div className="text-left">
+                              <h4 className="font-semibold text-base sm:text-lg text-gray-900 dark:text-white">
+                                Allow File Downloads
+                              </h4>
+                              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-xs">
+                                {allowDownload
+                                  ? "Users can download files"
+                                  : "Download blocked (view only)"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Right: Toggle + Status */}
+                          <div className="flex items-center gap-4">
+                            {/* Smart Toggle */}
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={allowDownload}
+                                onChange={handleToggleDownload}
+                                disabled={downloadLoading}
+                                className="sr-only peer"
+                              />
+
+                              {/* Track */}
+                              <div
+                                className={`w-12 h-7 rounded-full transition-all duration-300 
+            ${
+              downloadLoading
+                ? "bg-gray-400 dark:bg-gray-600"
+                : allowDownload
+                ? "bg-gradient-to-r from-orange-500 to-amber-500 shadow-lg shadow-orange-500/40"
+                : "bg-gray-300 dark:bg-gray-700"
+            } peer-focus:ring-4 peer-focus:ring-orange-300/30 dark:peer-focus:ring-orange-800/30`}
+                              >
+                                {/* Knob */}
+                                <div
+                                  className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow-md 
+              transition-all duration-300 flex items-center justify-center
+              ${allowDownload ? "translate-x-5" : "translate-x-0"}
+              ${downloadLoading ? "animate-pulse" : ""}`}
+                                >
+                                  {downloadLoading ? (
+                                    <div className="w-3 h-3 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                                  ) : allowDownload ? (
+                                    <Check
+                                      size={14}
+                                      className="text-orange-600"
+                                    />
+                                  ) : (
+                                    <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                                  )}
+                                </div>
+                              </div>
+                            </label>
+
+                            {/* Status Text */}
+                            <span
+                              className={`text-sm font-bold min-w-[48px] text-center
+          ${
+            downloadLoading
+              ? "text-gray-500 dark:text-gray-400"
+              : allowDownload
+              ? "text-orange-600 dark:text-orange-400"
+              : "text-gray-500 dark:text-gray-400"
+          }`}
+                            >
+                              {downloadLoading
+                                ? "..."
+                                : allowDownload
+                                ? "ON"
+                                : "OFF"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
