@@ -71,12 +71,12 @@ export const LoginWithToken = async (req, res) => {
     const accessToken = jwt.sign(
       { userId: user._id },
       process.env.JWT_TOKEN_SECRETE,
-      { expiresIn: "1m" }
+      { expiresIn: "20m" }
     );
     const cookiesOption = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      // sameSite: "none",
+      sameSite: "none",
       maxAge: 60 * 60 * 1000,
     };
     res.cookie("tokenLogin", accessToken, cookiesOption);
