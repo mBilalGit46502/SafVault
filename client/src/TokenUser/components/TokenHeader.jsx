@@ -1,191 +1,171 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  LogOut,
-  User,
-  LayoutDashboard,
-  Moon,
-  Sun,
-  Loader2,
-} from "lucide-react";
+import { LogOut, User, LayoutDashboard, Timer } from "lucide-react";
 import Axios from "../../api/Axios";
 import SummaryApi from "../../api/SummaryApi";
-import { toast } from "react-toastify";
 import Swal from "sweetalert2";
+import { jwtDecode } from "jwt-decode";
 
 function TokenHeader({ theme, setTheme }) {
   const navigate = useNavigate();
-  const token = localStorage.getItem("tokenLogin");
-  const userData = JSON.parse(localStorage.getItem("userData"));
-  const [openMenu, setOpenMenu] = useState(false);
   const [isApproved, setIsApproved] = useState(
-    JSON.parse(localStorage.getItem("isApproved")) || false
+    JSON.parse(localStorage.getItem("isApproved") || "false")
   );
-  const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const [totalDuration, setTotalDuration] = useState(600);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const token = localStorage.getItem("tokenLogin");
+  const userData = JSON.parse(localStorage.getItem("userData") || "{}");
+
+  // Smart Timer Logic
+  useEffect(() => {
+    if (!token || !isApproved) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const update = () => {
+      try {
+        const decoded = jwtDecode(token);
+        const duration = decoded.exp - decoded.iat;
+        setTotalDuration(duration);
+        const remaining = Math.max(0, Math.floor((decoded.exp * 1000 - Date.now()) / 1000));
+        if (remaining <= 0) {
+          handleAutoLogout();
+        } else {
+          setTimeLeft(remaining);
+        }
+      } catch (err) {
+        handleAutoLogout();
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [token, isApproved]);
+
+  // Detect approval
+  useEffect(() => {
+    const check = () => {
+      const approved = JSON.parse(localStorage.getItem("isApproved") || "false");
+      if (approved && !isApproved) setIsApproved(true);
+    };
+    check();
+    const poll = setInterval(check, 1500);
+    return () => clearInterval(poll);
+  }, [isApproved]);
+
+  const formatTime = (s) => {
+    const m = String(Math.floor(s / 60)).padStart(2, "0");
+    const s2 = String(s % 60).padStart(2, "0");
+    return `${m}:${s2}`;
+  };
+
+  const progress = timeLeft && totalDuration ? (timeLeft / totalDuration) * 100 : 0;
+
+  const getProgressColor = () => {
+    if (progress > 66.66) return "bg-green-500";
+    if (progress > 33.33) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
+  const handleAutoLogout = async () => {
+    try {
+      await Axios({ ...SummaryApi.UserLogoutAndRemove, headers: { Authorization: `Bearer ${token}` } });
+    } catch (err) {}
+    localStorage.clear();
+    sessionStorage.clear();
+    document.cookie = "tokenLogin=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    navigate("/userlogin", { replace: true });
+  };
+
+  const handleLogout = () => {
+    Swal.fire({
+      title: "Logout?",
+      text: "Are you sure?",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      confirmButtonText: "Yes",
+    }).then(r => r.isConfirmed && handleAutoLogout());
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  const handleLogout = async () => {
-    try {
-      const result = await Swal.fire({
-        title: "Are you sure?",
-        text: "You will be logged out from this device.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#e67e22",
-        cancelButtonColor: "#6b7280",
-        confirmButtonText: "Yes, Logout",
-        background: theme === "dark" ? "#1f2937" : "#ffffff",
-        color: theme === "dark" ? "#f3f4f6" : "#111827",
-      });
-
-      if (!result.isConfirmed) return;
-
-      setLoading(true);
-
-      const { data } = await Axios({
-        ...SummaryApi.UserLogoutAndRemove,
-      });
-
-      console.log(data);
-      if (data?.success) {
-        localStorage.clear();
-        sessionStorage.clear();
-        document.cookie.split(";").forEach((cookie) => {
-          document.cookie = cookie
-            .replace(/^ +/, "")
-            .replace(
-              /=.*/,
-              "=;expires=" + new Date().toUTCString() + ";path=/"
-            );
-        });
-      }
-
-      await Swal.fire({
-        title: "Logged out!",
-        text: "You’ve been logged out securely.",
-        icon: "success",
-        confirmButtonColor: "#e67e22",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-
-      setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 1000);
-    } catch (error) {
-      console.error("Logout Error:", error);
-      Swal.fire({
-        title: "Error!",
-        text: "Logout failed. Please try again.",
-        icon: "error",
-        confirmButtonColor: "#e67e22",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <header className="w-full sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm z-50 backdrop-blur-md transition-all duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 flex justify-between items-center h-[70px]">
-        {/* 🔹 Logo */}
+    <header className="w-full sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
 
-        <Link
-          to={isApproved ? "/dashboard" : "/pending-access"}
-          className={`text-2xl sm:text-3xl font-extrabold text-orange-500 tracking-wide hover:opacity-80 transition duration-200`}
-        >
-          Saf
-          <span className={`${"text-gray-900"}`}>Vault</span>
+        {/* Logo */}
+        <Link to={isApproved ? "/dashboard" : "/pending-access"} className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+          Saf<span className="text-gray-900 dark:text-white">Vault</span>
         </Link>
 
-        <div className="flex items-center gap-3 sm:gap-5">
-          {token ? (
+        {/* Right Side */}
+        <div className="flex items-center gap-6">
+
+          {/* Smart Timer Bar */}
+          {isApproved && timeLeft !== null && (
+            <div className="flex items-center gap-3">
+              <Timer className="w-5 h-5 text-gray-500" />
+              <div className="w-32 sm:w-40">
+                <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                  <span>Session</span>
+                  <span className="font-mono font-medium">{formatTime(timeLeft)}</span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${getProgressColor()}`}
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* User Dropdown */}
+          {token && (
             <div className="relative">
               <button
-                onClick={() => setOpenMenu((prev) => !prev)}
-                disabled={!isApproved || loading}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white transition ${
-                  isApproved
-                    ? "bg-orange-500 hover:bg-orange-600"
-                    : "bg-gray-400 cursor-not-allowed"
-                }`}
+                onClick={() => setShowMenu(!showMenu)}
+                className="flex items-center gap-3 px-5 py-2.5 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition"
               >
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <User size={18} />
-                    <span className="hidden sm:inline">
-                      {userData?.username || "Token User"}
-                    </span>
-                    {!isApproved && (
-                      <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                    )}
-                  </>
-                )}
+                <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+                  {userData?.username?.[0]?.toUpperCase() || "U"}
+                </div>
+                <span className="hidden sm:block font-medium text-gray-700 dark:text-gray-300">
+                  {userData?.username || "User"}
+                </span>
               </button>
 
-              {openMenu && (
-                <div
-                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 
-                  rounded-lg shadow-xl overflow-hidden animate-slideDown backdrop-blur-sm transition-all"
-                >
+              {showMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <button
-                    onClick={() =>
-                      isApproved
-                        ? navigate("/dashboard")
-                        : navigate("/pending-access")
-                    }
-                    className="flex items-center gap-2 px-4 py-2 w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                    onClick={() => { setShowMenu(false); navigate(isApproved ? "/dashboard" : "/pending-access"); }}
+                    className="w-full px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-3"
                   >
-                    <LayoutDashboard size={16} /> Dashboard
+                    <LayoutDashboard className="w-5 h-5 text-indigo-600" />
+                    <span className="font-medium">Dashboard</span>
                   </button>
-
                   <hr className="border-gray-200 dark:border-gray-700" />
-
                   <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 px-4 py-2 w-full text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-700/30 transition"
+                    onClick={() => { setShowMenu(false); handleLogout(); }}
+                    className="w-full px-5 py-4 text-left hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 text-red-600"
                   >
-                    <LogOut size={16} /> Logout
+                    <LogOut className="w-5 h-5" />
+                    <span className="font-medium">Logout</span>
                   </button>
                 </div>
               )}
             </div>
-          ) : (
-            <>
-              <button
-                onClick={() => navigate("/login")}
-                className="text-gray-700 dark:text-gray-200 hover:text-orange-600 transition"
-              >
-                Login
-              </button>
-              <button
-                onClick={() => navigate("/signup")}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow transition"
-              >
-                Signup
-              </button>
-            </>
           )}
         </div>
       </div>
-
-      <style>
-        {`
-          @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .animate-slideDown {
-            animation: slideDown 0.25s ease-out;
-          }
-        `}
-      </style>
     </header>
   );
 }
