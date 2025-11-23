@@ -9,7 +9,6 @@ import {
   Pencil,
   Trash2,
   Check,
-  XCircle,
   Search,
   SortAsc,
   SortDesc,
@@ -19,6 +18,8 @@ import {
   Download,
   Share2,
   MoreVertical,
+  Square,
+  CheckSquare,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -28,8 +29,6 @@ import FileUpload from "../components/FileUpload";
 import { useDispatch, useSelector } from "react-redux";
 import { addFileToFolder, setCurrentFolder } from "../storeSlices/folderSlice";
 import { motion, AnimatePresence } from "framer-motion";
-
-// ────────────────────── PDF.js Setup (Vite 2025) ──────────────────────
 import * as pdfjsLib from "pdfjs-dist";
 import { get, set } from "idb-keyval";
 
@@ -38,17 +37,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).href;
 
-// ────────────────────── THUMBNAIL CACHING (Never reloads again) ──────────────────────
-// ────────────────────── PERFECT THUMBNAIL CACHING (FIXED) ──────────────────────
+// ────────────────────── THUMBNAIL CACHING (PERFECT) ──────────────────────
 const memoryCache = new Map();
-
-// Use full URL + fileId (or just full URL if unique)
 const getCacheKey = (url, fileId) => `pdf_thumb_${fileId || url}`;
-
 const getCachedThumbnail = async (url, fileId) => {
   const key = getCacheKey(url, fileId);
   if (memoryCache.has(key)) return memoryCache.get(key);
-
   try {
     const cached = await get(key);
     if (cached) memoryCache.set(key, cached);
@@ -57,7 +51,6 @@ const getCachedThumbnail = async (url, fileId) => {
     return null;
   }
 };
-
 const saveThumbnailToCache = async (url, fileId, dataUrl) => {
   const key = getCacheKey(url, fileId);
   memoryCache.set(key, dataUrl);
@@ -67,19 +60,15 @@ const saveThumbnailToCache = async (url, fileId, dataUrl) => {
     console.warn("Cache save failed", err);
   }
 };
-// ────────────────────── CACHED PDF THUMBNAIL COMPONENT ──────────────────────
+
 const PdfThumbnail = ({ url, fileName, fileId }) => {
-  // ← Add fileId prop
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-
     const renderThumbnail = async () => {
       if (!url || cancelled) return;
-
-      // Use fileId for unique cache key
       const cached = await getCachedThumbnail(url, fileId);
       if (cached && !cancelled) {
         const img = new Image();
@@ -95,41 +84,28 @@ const PdfThumbnail = ({ url, fileName, fileId }) => {
         img.src = cached;
         return;
       }
-
       try {
-        const loadingTask = pdfjsLib.getDocument(url);
-        const pdf = await loadingTask.promise;
+        const pdf = await pdfjsLib.getDocument(url).promise;
         const page = await pdf.getPage(1);
         const viewport = page.getViewport({ scale: 1.5 });
-
         const canvas = canvasRef.current;
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-
-        await page.render({
-          canvasContext: canvas.getContext("2d"),
-          viewport,
-        }).promise;
-
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport })
+          .promise;
         if (cancelled) return;
-
         const dataUrl = canvas.toDataURL("image/webp", 0.9);
-        await saveThumbnailToCache(url, fileId, dataUrl); // ← Pass fileId
-
+        await saveThumbnailToCache(url, fileId, dataUrl);
         setLoading(false);
       } catch (err) {
-        if (!cancelled) {
-          console.warn("PDF thumbnail failed:", fileName, err);
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
-
     renderThumbnail();
     return () => {
       cancelled = true;
     };
-  }, [url, fileName, fileId]); // ← Add fileId to deps
+  }, [url, fileName, fileId]);
 
   return (
     <div className="relative w-full h-40 bg-gray-100 rounded-lg border overflow-hidden">
@@ -140,7 +116,7 @@ const PdfThumbnail = ({ url, fileName, fileId }) => {
       )}
       <canvas
         ref={canvasRef}
-        className="w-full h-25 object-cover rounded-lg"
+        className="w-full h-full object-cover rounded-lg"
         style={{ display: loading ? "none" : "block" }}
       />
       {!loading && (
@@ -151,35 +127,23 @@ const PdfThumbnail = ({ url, fileName, fileId }) => {
     </div>
   );
 };
-// ────────────────────── MAIN COMPONENT ──────────────────────
-ReactModal.setAppElement("#root");
 
-const ActionButton = ({
-  onClick,
-  title,
-  icon: Icon,
-  color,
-  fullWidth = false,
-}) => (
+const ActionButton = ({ onClick, icon: Icon, color, fullWidth = false }) => (
   <button
     onClick={onClick}
-    title={title}
     className={`${
-      fullWidth ? "col-span-2 sm:col-span-3" : "col-span-1"
-    } p-2 rounded-xl hover:bg-gray-50/70 transition-all group flex  items-center justify-center text-center`}
+      fullWidth ? "col-span-2" : "col-span-1"
+    } p-3 rounded-xl hover:bg-gray-100 transition-all group flex items-center justify-center`}
   >
-    <div className="p-1.5 rounded-full bg-white transition-all group-hover:bg-opacity-0">
-      <Icon
-        size={12}
-        className={`mx-auto ${color} transition-transform group-hover:scale-110`}
-      />
-    </div>
-    {/* Label visible on small screens (mobile UX improvement) */}
-    <span className="text-xs mt-1 text-gray-500 font-medium hidden sm:block">
-      {title}
-    </span>
+    <Icon
+      size={16}
+      className={`${color} group-hover:scale-110 transition-transform`}
+    />
   </button>
 );
+
+ReactModal.setAppElement("#root");
+
 function FolderDetail() {
   const { id } = useParams();
   const [files, setFiles] = useState([]);
@@ -188,59 +152,223 @@ function FolderDetail() {
   const [newFileName, setNewFileName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortAsc, setSortAsc] = useState(true);
+
+  // ────────────────────── UNIVERSAL DELETE STATE (Single + Bulk) ──────────────────────
   const [confirmDelete, setConfirmDelete] = useState({
     open: false,
-    fileId: null,
+    fileIds: [], // Array of file IDs to delete
   });
 
+  // ────────────────────── SELECTION MODE ──────────────────────
+  const [selectedFiles, setSelectedFiles] = useState(new Set());
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [showSelectToast, setShowSelectToast] = useState(false);
+
+  const longPressTimer = useRef(null);
+  const doubleClickTimer = useRef(null);
   const inputRef = useRef(null);
   const dispatch = useDispatch();
   const currentFolder = useSelector((state) => state.folder.currentFolder);
-  const [menuOpen, setMenuOpen] = useState(null); // Tracks which file's menu is open
-  // OLD (dangerous – crashes on invalid URL)
+  const [menuOpen, setMenuOpen] = useState(null);
 
-  // NEW – SAFE VERSION (Never crashes)
+  // ────────────────────── ENTER SELECTION MODE ──────────────────────
+  const enterSelectMode = (fileId) => {
+    setSelectedFiles(new Set([fileId]));
+    setIsSelectMode(true);
+    setShowSelectToast(true);
+    setTimeout(() => setShowSelectToast(false), 1500);
+  };
+
+  useEffect(() => {
+    if (editingFileId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select(); // selects whole name for fast editing
+    }
+  }, [editingFileId]); // ← ADD THIS WHOLE useEffect
+
+  const handleCardClick = (fileId, e) => {
+    if (isSelectMode) {
+      toggleSelection(fileId);
+      return;
+    }
+    if (doubleClickTimer.current) {
+      clearTimeout(doubleClickTimer.current);
+      doubleClickTimer.current = null;
+      enterSelectMode(fileId);
+      return;
+    }
+    doubleClickTimer.current = setTimeout(() => {
+      doubleClickTimer.current = null;
+      openFile(files.findIndex((f) => f._id === fileId));
+    }, 300);
+  };
+
+  const handleMouseDown = (fileId) => {
+    if (isSelectMode) return;
+    longPressTimer.current = setTimeout(() => enterSelectMode(fileId), 600);
+  };
+
+  const handleMouseUp = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+
+  const toggleSelection = (fileId) => {
+    setSelectedFiles((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileId)) newSet.delete(fileId);
+      else newSet.add(fileId);
+      setIsSelectMode(newSet.size > 0);
+      return newSet;
+    });
+  };
+
+  const selectAll = () =>
+    setSelectedFiles(new Set(filteredFiles.map((f) => f._id)));
+  const deselectAll = () => {
+    setSelectedFiles(new Set());
+    setIsSelectMode(false);
+  };
+
+  // ────────────────────── UNIVERSAL DELETE HANDLER (Single OR Bulk) ──────────────────────
+  const confirmAndDelete = async () => {
+    const fileIds = confirmDelete.fileIds;
+    if (fileIds.length === 0) return;
+
+    const count = fileIds.length;
+    toast.loading(`Deleting ${count} file${count > 1 ? "s" : ""}...`);
+
+    try {
+      const results = await Promise.allSettled(
+        fileIds.map((id) => Axios({ ...SummaryApi.deleteFile(id) }))
+      );
+
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const successCount = count - failed;
+
+      toast.dismiss();
+
+      if (failed === 0) {
+        toast.success(
+          `Deleted ${successCount} file${successCount > 1 ? "s" : ""}`
+        );
+      } else {
+        toast.warn(`${successCount} deleted, ${failed} failed`);
+      }
+
+      // Remove from UI
+      setFiles((prev) => prev.filter((f) => !fileIds.includes(f._id)));
+
+      // Exit selection mode if active
+      if (isSelectMode) deselectAll();
+    } catch {
+      toast.dismiss();
+      toast.error("Delete failed");
+    } finally {
+      setConfirmDelete({ open: false, fileIds: [] });
+    }
+  };
+
+  // Trigger delete from 3-dot menu (single)
+  const triggerSingleDelete = (fileId) => {
+    setConfirmDelete({ open: true, fileIds: [fileId] });
+    setMenuOpen(null);
+  };
+
+  // Trigger bulk delete from top bar
+  const triggerBulkDelete = () => {
+    if (selectedFiles.size === 0) return;
+    setConfirmDelete({ open: true, fileIds: Array.from(selectedFiles) });
+  };
+
+  // ────────────────────── FILE PREVIEW & URL VALIDATION ──────────────────────
   const isValidUrl = (url) => {
     if (!url || typeof url !== "string") return false;
     try {
-      // Only allow http/https
       const parsed = new URL(url);
       return parsed.protocol === "http:" || parsed.protocol === "https:";
-    } catch (e) {
+    } catch {
       return false;
     }
   };
 
+  const renderPreview = (file) => {
+    const ext = (file.name?.split(".").pop() || "").toLowerCase();
+    if (!isValidUrl(file.url)) {
+      return (
+        <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg border text-gray-500">
+          <FileIcon size={35} />
+          <p className="text-xs mt-1">Invalid URL</p>
+        </div>
+      );
+    }
+    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) {
+      return (
+        <img
+          src={file.url}
+          alt={file.name}
+          className="w-full h-40 object-cover rounded-lg border"
+          loading="lazy"
+        />
+      );
+    }
+    if (ext === "pdf") {
+      return (
+        <PdfThumbnail url={file.url} fileName={file.name} fileId={file._id} />
+      );
+    }
+    if (["mp4", "webm", "ogg"].includes(ext)) {
+      return (
+        <video
+          src={file.url}
+          controls
+          className="w-full h-40 object-cover rounded-lg border"
+        />
+      );
+    }
+    return (
+      <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg border text-gray-500">
+        <FileIcon size={35} />
+        <p className="text-xs mt-1">No Preview</p>
+      </div>
+    );
+  };
+
+  const filteredFiles = [...files]
+    .filter((f) =>
+      (f.name || "").toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) =>
+      sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+    );
+
+  // ────────────────────── FETCH DATA ──────────────────────
   useEffect(() => {
-    const fetchFiles = async () => {
+    const fetch = async () => {
       try {
         const { data } = await Axios({ ...SummaryApi.getFilesInFolder(id) });
         if (data?.success) {
-          setFiles(data?.data);
-          dispatch(addFileToFolder(data?.data));
-        } else toast.error(data?.message || "Failed to load files");
+          setFiles(data.data);
+          dispatch(addFileToFolder(data.data));
+        }
       } catch {
         toast.error("Failed to load files");
       }
-    };
-
-    const getFolder = async () => {
       try {
         const { data } = await Axios({ ...SummaryApi.getFolder(id) });
         if (data?.success) dispatch(setCurrentFolder(data.data));
-      } catch {
-        toast.error("Failed to load folder");
-      }
+      } catch {}
     };
-
-    fetchFiles();
-    getFolder();
+    fetch();
   }, [id, dispatch]);
 
-  useEffect(() => {
-    if (editingFileId && inputRef.current) inputRef.current.focus();
-  }, [editingFileId]);
+  const openFile = (index) => setSelectedFileIndex(index);
+  const closeModal = () => setSelectedFileIndex(null);
+  const nextFile = () => setSelectedFileIndex((i) => (i + 1) % files.length);
+  const prevFile = () =>
+    setSelectedFileIndex((i) => (i === 0 ? files.length - 1 : i - 1));
+  const selectedFile = files[selectedFileIndex];
 
+  // ────────────────────── ALL YOUR EXISTING HANDLERS (UNCHANGED) ──────────────────────
   const handleRename = async (fileId) => {
     if (!newFileName.trim()) return toast.error("Name cannot be empty");
     try {
@@ -261,31 +389,6 @@ function FolderDetail() {
     }
   };
 
-  const handleDelete = async (fileId) => {
-    try {
-      const card = document.getElementById(fileId);
-      if (card)
-        card.classList.add(
-          "opacity-0",
-          "scale-90",
-          "transition-all",
-          "duration-300"
-        );
-
-      const { data } = await Axios({ ...SummaryApi.deleteFile(fileId) });
-      if (data?.success) {
-        setTimeout(
-          () => setFiles((prev) => prev.filter((f) => f._id !== fileId)),
-          300
-        );
-        toast.success("File deleted");
-        setConfirmDelete({ open: false, fileId: null });
-      } else toast.error(data.message);
-    } catch {
-      toast.error("Delete failed");
-    }
-  };
-
   const handleDownload = async (fileUrl, fileName) => {
     try {
       const res = await fetch(fileUrl);
@@ -300,62 +403,44 @@ function FolderDetail() {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = () => setMenuOpen(null);
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, []);
-  // ────────────────────── UNIVERSAL SHARE (Web + Android App + iOS) ──────────────────────
-const handleShare = async (fileUrl, fileName) => {
-  if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+  const handleShare = async (fileUrl, fileName) => {
+    if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    const supported = [
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "webp",
+      "pdf",
+      "mp4",
+      "docx",
+      "txt",
+    ].includes(ext);
 
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  const supported = [
-    "jpg",
-    "jpeg",
-    "png",
-    "gif",
-    "webp",
-    "pdf",
-    "mp4",
-    "docx",
-    "txt",
-  ].includes(ext);
-
-  // ONLY TRY REAL FILE SHARE ON HTTPS (not localhost)
-  if (supported && navigator.share && location.protocol === "https:") {
-    try {
-      const res = await fetch(fileUrl, { cache: "no-cache" });
-      const blob = await res.blob();
-
-      const file = new File([blob], fileName, {
-        type:
-          ext === "pdf"
-            ? "application/pdf"
-            : blob.type || "application/octet-stream",
-      });
-
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
-        toast.success("File shared!");
-        return;
-      }
-    } catch (err) {
-      // Silent — expected on localhost or APK
+    if (supported && navigator.share && location.protocol === "https:") {
+      try {
+        const res = await fetch(fileUrl, { cache: "no-cache" });
+        const blob = await res.blob();
+        const file = new File([blob], fileName, {
+          type: ext === "pdf" ? "application/pdf" : blob.type,
+        });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: fileName });
+          toast.success("File shared!");
+          return;
+        }
+      } catch {}
     }
-  }
+    if (navigator.share) {
+      await navigator.share({ url: fileUrl, title: fileName });
+      toast.success("Shared!");
+    } else {
+      navigator.clipboard.writeText(fileUrl);
+      toast.success("Link copied!");
+    }
+  };
 
-  // Fallback — works everywhere
-  if (navigator.share) {
-    await navigator.share({ url: fileUrl, title: fileName });
-    toast.success("Shared!");
-  } else {
-    navigator.clipboard.writeText(fileUrl);
-    toast.success("Link copied!");
-  }
-};
-
-  // ────────────────────── PERFECT PRINT (Image + PDF) ──────────────────────
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
 
@@ -486,87 +571,96 @@ const handleShare = async (fileUrl, fileName) => {
     setTimeout(() => iframe.remove(), 20000);
   };
 
-  const openFile = (index) => setSelectedFileIndex(index);
-  const closeModal = () => setSelectedFileIndex(null);
-  const nextFile = () => setSelectedFileIndex((i) => (i + 1) % files.length);
-  const prevFile = () =>
-    setSelectedFileIndex((i) => (i === 0 ? files.length - 1 : i - 1));
-  const selectedFile = files[selectedFileIndex];
-
-  const renderPreview = (file) => {
-    const ext = (file.name?.split(".").pop() || "").toLowerCase();
-
-    if (!isValidUrl(file.url)) {
-      return (
-        <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg border text-gray-500">
-          <FileIcon size={35} />
-          <p className="text-xs mt-1">Invalid URL</p>
-        </div>
-      );
-    }
-
-    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) {
-      return (
-        <img
-          src={file.url}
-          alt={file.name}
-          className="w-full h-40 object-cover rounded-lg border"
-          loading="lazy"
-        />
-      );
-    }
-
-    if (ext === "pdf") {
-      return (
-        <PdfThumbnail url={file.url} fileName={file.name} fileId={file._id} />
-      );
-    }
-    if (["mp4", "webm", "ogg"].includes(ext)) {
-      return (
-        <video
-          src={file.url}
-          controls
-          className="w-full h-40 object-cover rounded-lg border"
-        />
-      );
-    }
-
-    return (
-      <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg border text-gray-500">
-        <FileIcon size={35} />
-        <p className="text-xs mt-1">No Preview</p>
-      </div>
-    );
-  };
-
-  const filteredFiles = [...files]
-    .filter((f) =>
-      (f.name || "").toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) =>
-      sortAsc
-        ? (a.name || "").localeCompare(b.name || "")
-        : (b.name || "").localeCompare(a.name || "")
-    );
-
-  const theme = localStorage.getItem("theme");
-
   return (
-    <div className="p-4 sm:p-6 bg-transparent min-h-screen bg-gray-50">
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen relative">
+      {/* TOP SELECTION BAR */}
+      <AnimatePresence>
+        {isSelectMode && (
+          <motion.div
+            initial={{ y: -100 }}
+            animate={{ y: 0 }}
+            exit={{ y: -100 }}
+            className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={deselectAll}
+                  className="p-2 hover:bg-white/20 rounded-full transition"
+                >
+                  <X size={24} />
+                </button>
+                <span className="text-lg font-semibold">
+                  {selectedFiles.size} selected
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={
+                    selectedFiles.size === filteredFiles.length
+                      ? deselectAll
+                      : selectAll
+                  }
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition"
+                >
+                  {selectedFiles.size === filteredFiles.length ? (
+                    <CheckSquare size={20} />
+                  ) : (
+                    <Square size={20} />
+                  )}
+                  <span className="hidden sm:inline">
+                    {selectedFiles.size === filteredFiles.length
+                      ? "Deselect"
+                      : "Select"}{" "}
+                    All
+                  </span>
+                </button>
+                <button
+                  onClick={triggerBulkDelete}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 rounded-xl transition"
+                >
+                  <Trash2 size={20} />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Selection Toast */}
+      <AnimatePresence>
+        {showSelectToast && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            // --- UPDATED CLASSES ---
+            className="fixed top-24 lg:right-[500px] flex items-center justify-center z-50 pointer-events-none"
+            // --- INNER CONTENT ---
+          >
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-full shadow-2xl font-bold text-lg max-w-full mx-4">
+              Selection Mode Activated
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+      <div
+        className={`flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 ${
+          isSelectMode ? "mt-20" : ""
+        }`}
+      >
         <div className="text-center sm:text-left">
           <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
             <FolderIcon size={24} className="text-blue-600" />
-            <div className={theme === "dark" ? "text-white" : "text-black"}>
-              {currentFolder?.name || "Folder"}
-            </div>
+            {currentFolder?.name || "Folder"}
           </h2>
           <p className="text-gray-500 text-sm mt-1">
-            {filteredFiles.length} file{filteredFiles.length !== 1 ? "s" : ""}
+            {filteredFiles.length} files
           </p>
         </div>
-
         <div className="flex flex-col sm:flex-row gap-3 items-center w-full sm:w-auto">
           <div className="flex items-center border rounded-xl bg-white px-3 py-1.5 w-full sm:w-60 shadow-sm">
             <Search size={18} className="text-gray-500" />
@@ -597,141 +691,191 @@ const handleShare = async (fileUrl, fileName) => {
             <p className="text-gray-500 mt-3 text-sm">No files found</p>
           </div>
         ) : (
-          filteredFiles.map((file) => (
-            <motion.div
-              layout
-              key={file._id}
-              id={file._id}
-              className="relative bg-white w-[140px] sm:w-[170px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between"
-            >
-              <div
-                onClick={() =>
-                  openFile(files.findIndex((f) => f._id === file._id))
-                }
-                className="flex-1"
+          filteredFiles.map((file) => {
+            const isSelected = selectedFiles.has(file._id);
+            return (
+              <motion.div
+                layout
+                key={file._id}
+                id={file._id}
+                className={`relative bg-white w-[140px] sm:w-[170px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between
+                  ${
+                    isSelected
+                      ? "ring-4 ring-blue-500 scale-105 shadow-2xl"
+                      : ""
+                  }
+                `}
+                onClick={(e) => {
+                  if (editingFileId) {
+                    e.stopPropagation(); // ← BLOCK preview & selection while renaming
+                    return;
+                  }
+                  handleCardClick(file._id, e);
+                }}
+                onMouseDown={() => {
+                  if (editingFileId) return; // ← BLOCK long-press while renaming
+                  handleMouseDown(file._id);
+                }}
+                onMouseUp={handleMouseUp}
+                onTouchStart={() => {
+                  if (editingFileId) return; // ← BLOCK long-press on mobile while renaming
+                  handleMouseDown(file._id);
+                }}
+                onTouchEnd={handleMouseUp}
               >
-                {renderPreview(file)}
-              </div>
-
-              {/* 3-DOT MENU — MODERN & CLEAN */}
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
-                {/* 1. PRIMARY MENU BUTTON (3-Dots) */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(menuOpen === file._id ? null : file._id);
-                  }}
-                  // Modern, glass-like button styling
-                  className="bg-white/80 hover:bg-white backdrop-blur-md border border-gray-200 rounded-full p-2 shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-200"
-                  aria-label="Open file actions menu"
-                >
-                  <MoreVertical size={20} className="text-gray-600" />
-                </button>
-
-                {/* 2. MENU DROPDOWN (Uses AnimatePresence for smooth close) */}
-                <AnimatePresence>
-                  {menuOpen === file._id && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8, y: -20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.8, y: -20 }}
-                      transition={{ duration: 0.2 }}
-                      // Glass-like container style
-                      className="absolute h-32 p-0 m-0  right-0 top-12  bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-100 overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden z-50 transform-gpu"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        boxShadow:
-                          "0 10px 30px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)",
-                      }}
+                {/* Checkbox */}
+                {(isSelectMode || isSelected) && (
+                  <div className="absolute top-3 left-3 z-50">
+                    <div
+                      className={`w-7 h-7 rounded-full border-2 ${
+                        isSelected
+                          ? "bg-blue-600 border-blue-600"
+                          : "bg-white border-gray-400"
+                      } flex items-center justify-center transition`}
                     >
-                      <div className="  flex flex-col items-center p-0 m-0 ">
-                        {/* ACTION BUTTON COMPONENT (Helper structure) */}
-                        {/* The structure below provides better mobile UX by showing labels */}
-
-                        {/* RENAME */}
-                        <ActionButton
-                          onClick={() => {
-                            setEditingFileId(file._id);
-                            setNewFileName(file.name);
-                            setMenuOpen(null);
-                          }}
-                          // title="Rename"
-                          icon={Pencil}
-                          color="text-blue-600"
-                        />
-
-                        {/* SHARE */}
-                        <ActionButton
-                          onClick={() => {
-                            setMenuOpen(null);
-                            handleShare(file.url, file.name);
-                          }}
-                          // title="Share"
-                          icon={Share2}
-                          color="text-emerald-600"
-                        />
-
-                        {/* DOWNLOAD */}
-                        <ActionButton
-                          onClick={() => {
-                            handleDownload(file.url, file.name);
-                            setMenuOpen(null);
-                          }}
-                          // title="Download"
-                          icon={Download}
-                          color="text-indigo-600"
-                        />
-
-                        {/* PRINT */}
-                        <ActionButton
-                          onClick={() => {
-                            handlePrintPreview(file.url, file.name);
-                            setMenuOpen(null);
-                          }}
-                          // title="Print"
-                          icon={Printer}
-                          color="text-gray-700"
-                        />
-
-                        {/* DELETE (Full Width for Emphasis) */}
-                        <ActionButton
-                          onClick={() => {
-                            setConfirmDelete({ open: true, fileId: file._id });
-                            setMenuOpen(null);
-                          }}
-                          // title="Delete"
-                          icon={Trash2}
-                          color="text-red-600"
-                          fullWidth
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              <div className="mt-3 text-center">
-                {editingFileId === file._id ? (
-                  <input
-                    ref={inputRef}
-                    value={newFileName}
-                    onChange={(e) => setNewFileName(e.target.value)}
-                    onBlur={() => setEditingFileId(null)}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && handleRename(file._id)
-                    }
-                    className="border rounded-md p-1 text-sm w-full text-center"
-                  />
-                ) : (
-                  <p className="text-sm font-medium text-gray-800 truncate">
-                    {file.name}
-                  </p>
+                      {isSelected && <Check size={16} className="text-white" />}
+                    </div>
+                  </div>
                 )}
-              </div>
-            </motion.div>
-          ))
+
+                <div className="flex-1">{renderPreview(file)}</div>
+
+                {/* 3-Dot Menu */}
+                {!isSelectMode && (
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(menuOpen === file._id ? null : file._id);
+                      }}
+                      className="bg-white/80 hover:bg-white backdrop-blur-md border border-gray-200 rounded-full p-2 shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                    >
+                      <MoreVertical size={20} className="text-gray-600" />
+                    </button>
+                    <AnimatePresence>
+                      {menuOpen === file._id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.8, y: -20 }}
+                          className="absolute h-32 p-0 m-0  right-0 top-12  bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-100 overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden z-50 transform-gpu"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex flex-col p-2">
+                            <ActionButton
+                              onClick={() => {
+                                setEditingFileId(file._id);
+                                setNewFileName(file.name);
+                                setMenuOpen(null);
+                              }}
+                              icon={Pencil}
+                              color="text-blue-600"
+                            />
+                            <ActionButton
+                              onClick={() => {
+                                handleShare(file.url, file.name);
+                                setMenuOpen(null);
+                              }}
+                              icon={Share2}
+                              color="text-emerald-600"
+                            />
+                            <ActionButton
+                              onClick={() => {
+                                handleDownload(file.url, file.name);
+                                setMenuOpen(null);
+                              }}
+                              icon={Download}
+                              color="text-indigo-600"
+                            />
+                            <ActionButton
+                              onClick={() => {
+                                handlePrintPreview(file.url, file.name);
+                                setMenuOpen(null);
+                              }}
+                              icon={Printer}
+                              color="text-gray-700"
+                            />
+                            <ActionButton
+                              onClick={() => triggerSingleDelete(file._id)}
+                              icon={Trash2}
+                              color="text-red-600"
+                              fullWidth
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                <div className="mt-3 text-center">
+                  {editingFileId === file._id ? (
+                    <input
+                      ref={inputRef}
+                      value={newFileName}
+                      onChange={(e) => setNewFileName(e.target.value)}
+                      onBlur={() => handleRename(file._id)}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && handleRename(file._id)
+                      }
+                      onClick={(e) => e.stopPropagation()} // ← PREVENT preview
+                      onDoubleClick={(e) => e.stopPropagation()} // ← PREVENT selection
+                      className="w-full px-2 py-1 text-sm border border-blue-500 rounded-md text-center bg-white shadow-inner outline-none"
+                      placeholder="Enter name"
+                    />
+                  ) : (
+                    <p
+                      onClick={(e) => {
+                        e.stopPropagation(); // ← PREVENT preview & selection
+                        setEditingFileId(file._id);
+                        setNewFileName(file.name);
+                      }}
+                      className="text-sm font-medium text-gray-800 truncate hover:text-blue-600 hover:underline cursor-text select-text"
+                    >
+                      {file.name}
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })
         )}
       </motion.div>
+
+      {/* UNIVERSAL DELETE MODAL */}
+      <ReactModal
+        isOpen={confirmDelete.open}
+        onRequestClose={() => setConfirmDelete({ open: false, fileIds: [] })}
+        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+        overlayClassName="fixed inset-0 z-50"
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center"
+        >
+          <Trash2 size={60} className="text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-3">
+            Delete {confirmDelete.fileIds.length} File
+            {confirmDelete.fileIds.length > 1 ? "s" : ""}?
+          </h2>
+          <p className="text-gray-600 mb-8">This action cannot be undone.</p>
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={() => setConfirmDelete({ open: false, fileIds: [] })}
+              className="px-6 py-3 bg-gray-200 rounded-xl hover:bg-gray-300 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmAndDelete}
+              className="px-6 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition"
+            >
+              Delete Forever
+            </button>
+          </div>
+        </motion.div>
+      </ReactModal>
 
       {/* Full Preview Modal */}
       <ReactModal
@@ -823,7 +967,7 @@ const handleShare = async (fileUrl, fileName) => {
                       src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
                         selectedFile.url
                       )}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-                      className="w-full h-full border-0 rounded-2xl"
+                      className="w-full h-full  border-0 rounded-2xl"
                       allowFullScreen
                     />
                   );
@@ -838,37 +982,6 @@ const handleShare = async (fileUrl, fileName) => {
             </div>
           </motion.div>
         )}
-      </ReactModal>
-
-      {/* Delete Confirmation */}
-      <ReactModal
-        isOpen={confirmDelete.open}
-        onRequestClose={() => setConfirmDelete({ open: false, fileId: null })}
-        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-      >
-        <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 text-center">
-          <Trash2 size={40} className="text-red-500 mx-auto mb-3" />
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">
-            Delete File?
-          </h2>
-          <p className="text-sm text-gray-500 mb-5">
-            This action cannot be undone.
-          </p>
-          <div className="flex justify-center gap-3">
-            <button
-              onClick={() => setConfirmDelete({ open: false, fileId: null })}
-              className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleDelete(confirmDelete.fileId)}
-              className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
       </ReactModal>
     </div>
   );

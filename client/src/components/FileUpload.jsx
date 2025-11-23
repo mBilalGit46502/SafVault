@@ -6,52 +6,69 @@ import { motion } from "framer-motion";
 import SummaryApi from "../api/SummaryApi";
 
 function FileUpload({ folderId, setFiles }) {
-  const [file, setFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]); // All selected files
+  const [previewFile, setPreviewFile] = useState(null);   // Only one for preview
   const [previewUrl, setPreviewUrl] = useState(null);
   const [progress, setProgress] = useState(0);
   const [uploadType, setUploadType] = useState("button");
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleFileSelect = (selectedFile) => {
-    setFile(selectedFile);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+  // Handle file selection (multiple)
+  const handleFilesSelect = (filesArray) => {
+    const files = Array.from(filesArray);
+    if (files.length === 0) return;
+
+    setSelectedFiles(files);
+
+    // Sirf pehli file ka preview dikhao
+    const firstFile = files[0];
+    setPreviewFile(firstFile);
+    setPreviewUrl(URL.createObjectURL(firstFile));
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    handleFileSelect(e.dataTransfer.files[0]);
+    handleFilesSelect(e.dataTransfer.files);
   };
 
+  // MAIN UPLOAD — SAB FILES EK SAATH UPLOAD + INSTANT SHOW
   const handleUpload = async () => {
-    if (!file) return toast.error("Please select or drag a file!");
+    if (selectedFiles.length === 0) return toast.error("No files selected!");
 
-    const formData = new FormData();
-    formData.append("file", file);
+    let uploadedCount = 0;
 
-    try {
-      const { data } = await Axios({
-        ...SummaryApi.uploadFileOnFolder(folderId),
-        data: formData,
+    for (const file of selectedFiles) {
+      const formData = new FormData();
+      formData.append("file", file);
 
-        headers: { "Content-Type": "multipart/form-data" },
-        onUploadProgress: (e) => {
-          setProgress(Math.round((e.loaded * 100) / e.total));
-        },
-      });
+      try {
+        const { data }  = await Axios({
+          ...SummaryApi.uploadFileOnFolder(folderId),
+          data: formData,
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (e) => {
+            const percent = Math.round((e.loaded * 100) / e.total);
+            setProgress(percent);
+          },
+        });
 
-      if (data?.success) {
-        toast.success(" File uploaded successfully!");
-        setFiles((prev) => [data.data, ...prev]);
-        setFile(null);
-        setPreviewUrl(null);
-        setProgress(0);
-      } else {
-        toast.error(data?.message);
+        if (data?.success) {
+          uploadedCount++;
+          // INSTANTLY ADD TO LIST — SAB EK SAATH DIKHEGA
+          setFiles((prev) => [data.data, ...prev]);
+        }
+      } catch (err) {
+        console.error("Failed:", file.name);
       }
-    } catch (error) {
-      toast.error("Upload failed! Please try again.");
     }
+
+    // Success + Reset
+    toast.success(`${uploadedCount} file${uploadedCount > 1 ? 's' : ''} uploaded!`);
+    setSelectedFiles([]);
+    setPreviewFile(null);
+    setPreviewUrl(null);
+    setProgress(0);
   };
 
   return (
@@ -86,13 +103,15 @@ function FileUpload({ folderId, setFiles }) {
         </div>
       </div>
 
+      {/* BROWSE MODE */}
       {uploadType === "button" ? (
         <div className="mt-5 border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition">
           <input
             type="file"
             id="fileInput"
             className="hidden"
-            onChange={(e) => handleFileSelect(e.target.files[0])}
+            multiple
+            onChange={(e) => handleFilesSelect(e.target.files)}
           />
           <label
             htmlFor="fileInput"
@@ -100,7 +119,7 @@ function FileUpload({ folderId, setFiles }) {
           >
             <FileUp size={34} />
             <span className="mt-2 text-sm sm:text-base">
-              Click to select a file
+              Click to select files (multiple allowed)
             </span>
           </label>
         </div>
@@ -119,41 +138,57 @@ function FileUpload({ folderId, setFiles }) {
           }`}
         >
           <p className="text-gray-500 text-sm sm:text-base">
-            {isDragging ? "Release to upload your file" : "Drag your file here"}
+            {isDragging ? "Release to upload" : "Drag your files here"}
           </p>
         </div>
       )}
 
+      {/* PREVIEW — SAME UI + FILE COUNT */}
       {previewUrl && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="mt-6 border rounded-xl p-4 bg-gray-50 flex flex-col items-center gap-3"
         >
-          {file?.type.startsWith("image/") ? (
-            <img
-              src={previewUrl}
-              alt="preview"
-              loading="eager"
-              className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg shadow-md"
-            />
-          ) : file?.type === "application/pdf" ? (
-            <div className="flex items-center gap-2 text-red-600 font-medium text-sm sm:text-base">
-              <FileText size={24} /> {file.name}
+          {/* Main Preview (First File Only) */}
+          {previewFile?.type.startsWith("image/") ? (
+            <div className="relative">
+              <img
+                src={previewUrl}
+                alt="preview"
+                className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg shadow-md"
+              />
+              {selectedFiles.length > 1 && (
+                <div className="absolute -bottom-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
+                  +{selectedFiles.length - 1}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-gray-600 text-sm sm:text-base">
-              <FileImage size={24} /> {file.name}
+            <div className="flex items-center gap-2 text-gray-600">
+              <FileText size={24} /> {previewFile.name}
+              {selectedFiles.length > 1 && (
+                <span className="ml-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                  +{selectedFiles.length - 1} more
+                </span>
+              )}
             </div>
           )}
 
+          {/* File Count Text */}
+          <p className="text-sm text-gray-600 font-medium">
+            {selectedFiles.length} file{selectedFiles.length > 1 ? "s" : ""} selected
+          </p>
+
+          {/* Upload Button */}
           <button
             onClick={handleUpload}
-            className="w-full sm:w-auto px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm sm:text-base"
+            className="w-full sm:w-auto px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm sm:text-base font-medium"
           >
-            Upload Now
+            {progress > 0 ? `Uploading... ${progress}%` : "Upload Now"}
           </button>
 
+          {/* Progress Bar */}
           {progress > 0 && (
             <div className="w-full mt-3 bg-gray-200 rounded-full h-2 overflow-hidden">
               <motion.div
