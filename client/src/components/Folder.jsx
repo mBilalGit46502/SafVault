@@ -174,7 +174,7 @@ function Folder() {
     const newIds = newOrder.map((f) => f._id);
 
     setManualOrderIds(newIds);
-    toast.success("Order saved permanently saved!", { autoClose: 1500 });
+    // toast.success("Order saved permanently saved!", { autoClose: 1500 });
   };
 
   // TOGGLE SORT
@@ -183,7 +183,7 @@ function Folder() {
     setSortMode(newMode);
     setManualOrderIds(null); // manual order hata do
     localStorage.removeItem("folderManualOrderIds"); // localStorage se bhi clear
-    toast.success(newMode === "asc" ? "Sorted A to Z" : "Sorted Z to A");
+    // toast.success(newMode === "asc" ? "Sorted A to Z" : "Sorted Z to A");
   };
 
   // FETCH FOLDERS
