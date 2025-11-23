@@ -80,8 +80,8 @@ function ProfileDetail({ user, onClose, popupRef }) {
         toast.success(res?.data?.message);
 
         dispatch(logoutUser());
-        localStorage.clear();
-
+        // localStorage.clear();
+// localStorage.removeItem("folderManualOrderIds");
         onClose();
         navigate("/");
       }

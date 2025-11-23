@@ -117,6 +117,17 @@ function Folder() {
     return [...originalFolders];
   }, [originalFolders, manualOrderIds, sortMode]);
 
+  useEffect(() => {
+    if (manualOrderIds) {
+      localStorage.setItem(
+        "folderManualOrderIds",
+        JSON.stringify(manualOrderIds)
+      );
+    } else {
+      localStorage.removeItem("folderManualOrderIds");
+    }
+  }, [manualOrderIds]);
+
   // Final display list with search + sort
   const displayFolders = useMemo(() => {
     let list = [...currentFolders];
@@ -154,31 +165,25 @@ function Folder() {
 
     setSortMode("manual");
 
-    const newOrder = arrayMove(
-      displayFolders,
-      displayFolders.findIndex((f) => f._id === active.id),
-      displayFolders.findIndex((f) => f._id === over.id)
-    );
+    const listToUse = searchQuery.trim() ? displayFolders : currentFolders;
 
+    const oldIndex = listToUse.findIndex((f) => f._id === active.id);
+    const newIndex = listToUse.findIndex((f) => f._id === over.id);
+
+    const newOrder = arrayMove(listToUse, oldIndex, newIndex);
     const newIds = newOrder.map((f) => f._id);
-    setManualOrderIds(newIds);
-    localStorage.setItem("folderManualOrderIds", JSON.stringify(newIds));
 
-    // toast.success("Position saved!", { autoClose: 1000 });
+    setManualOrderIds(newIds);
+    toast.success("Order saved permanently saved!", { autoClose: 1500 });
   };
 
   // TOGGLE SORT
   const toggleSort = () => {
-    if (sortMode === "asc") {
-      setSortMode("desc");
-      // toast.success("Sorted Z to A", { autoClose: 1000 });
-    } else {
-      setSortMode("asc");
-      // toast.success("Sorted A to Z", { autoClose: 1000 });
-    }
-    // Clear manual order when sorting
-    setManualOrderIds(null);
-    localStorage.removeItem("folderManualOrderIds");
+    const newMode = sortMode === "asc" ? "desc" : "asc";
+    setSortMode(newMode);
+    setManualOrderIds(null); // manual order hata do
+    localStorage.removeItem("folderManualOrderIds"); // localStorage se bhi clear
+    toast.success(newMode === "asc" ? "Sorted A to Z" : "Sorted Z to A");
   };
 
   // FETCH FOLDERS

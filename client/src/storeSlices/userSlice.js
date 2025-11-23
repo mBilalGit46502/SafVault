@@ -52,7 +52,8 @@ const userSlice = createSlice({
       localStorage.removeItem("userData");
       localStorage.removeItem("accessToken");
       localStorage.removeItem("folders");
-      localStorage.clear()
+      localStorage.removeItem("isAuthenticated");
+      // localStorage.clear()
       if (email) {
         localStorage.removeItem(`token_code_${email}`);
       }
