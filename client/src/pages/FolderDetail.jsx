@@ -404,6 +404,48 @@ function FolderDetail() {
     }
   };
 
+  // const handleShare = async (fileUrl, fileName) => {
+  //   if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+  //   const ext = fileName.split(".").pop()?.toLowerCase();
+  //   const supported = [
+  //     "jpg",
+  //     "jpeg",
+  //     "png",
+  //     "gif",
+  //     "webp",
+  //     "pdf",
+  //     "mp4",
+  //     "docx",
+  //     "txt",
+  //   ].includes(ext);
+
+  //   if (supported && navigator.share && location.protocol === "https:") {
+  //     try {
+  //       const res = await fetch(fileUrl, { cache: "no-cache" });
+  //       const blob = await res.blob();
+  //       const file = new File([blob], fileName, {
+  //         type: ext === "pdf" ? "application/pdf" : blob.type,
+  //       });
+  //       if (navigator.canShare?.({ files: [file] })) {
+  //         await navigator.share({ files: [file], title: fileName });
+  //         toast.success("File shared!");
+  //         return;
+  //       }
+  //     } catch {}
+  //   }
+  //   if (navigator.share) {
+  //     await navigator.share({ url: fileUrl, title: fileName });
+  //     toast.success("Shared!");
+  //   } else {
+  //     navigator.clipboard.writeText(fileUrl);
+  //     toast.success("Link copied!");
+  //   }
+  // };
+
+  // Function to handle downloading one or more files
+
+  
+  // Existing handleShare function (unchanged - works for single files)
   const handleShare = async (fileUrl, fileName) => {
     if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
     const ext = fileName.split(".").pop()?.toLowerCase();
@@ -442,9 +484,41 @@ function FolderDetail() {
     }
   };
 
-  // Function to handle downloading one or more files
-  
-  
+  // FIXED triggerBulkShare function (resolves NotAllowedError and bulk issues)
+  const triggerBulkShare = async () => {
+    if (selectedFiles.size === 0) return;
+
+    const filesToShare = files.filter((f) => selectedFiles.has(f._id));
+    const count = filesToShare.length;
+
+    // For single file: Use handleShare (content or URL sharing)
+    if (count === 1) {
+      await handleShare(filesToShare[0].url, filesToShare[0].name);
+      return;
+    }
+
+    // For multiple files: Share a list of URLs as text (ONE share call - no loops, no errors)
+    const urlsText = filesToShare.map((f) => `${f.name}: ${f.url}`).join("\n"); // Format: "filename: url"
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Shared Files (${count})`,
+          text: `Direct links to files:\n${urlsText}`,
+        });
+        toast.success(`Shared links to ${count} files!`);
+      } catch (error) {
+        console.warn("Share failed:", error);
+        toast.error("Sharing failed. Copying links to clipboard.");
+        navigator.clipboard.writeText(urlsText);
+        toast.info("Links copied!");
+      }
+    } else {
+      navigator.clipboard.writeText(urlsText);
+      toast.success(`Links to ${count} files copied!`);
+    }
+  };
+
   const triggerBulkDownload = async () => {
     if (selectedFiles.size === 0) return;
 
@@ -472,40 +546,7 @@ function FolderDetail() {
 
   // Function to handle sharing one or more files
 
-const triggerBulkShare = async () => {
-  if (selectedFiles.size === 0) return;
-
-  const filesToShare = files.filter((f) => selectedFiles.has(f._id));
-  const count = filesToShare.length;
-
-  // For single file: Use handleShare directly (no changes needed)
-  if (count === 1) {
-    await handleShare(filesToShare[0].url, filesToShare[0].name);
-    return;
-  }
-
-  // For multiple files: Share each one individually (like single sharing)
-  toast.info(`Sharing ${count} files one by one...`);
-
-  for (let i = 0; i < filesToShare.length; i++) {
-    const file = filesToShare[i];
-    try {
-      await handleShare(file.url, file.name);
-      // Add a delay to avoid overwhelming the browser/share dialogs
-      if (i < filesToShare.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500)); // 500ms delay
-      }
-    } catch (error) {
-      console.warn(`Failed to share ${file.name}:`, error);
-      toast.error(`Failed to share ${file.name}`);
-    }
-  }
-
-  toast.success(`Finished sharing ${count} files!`);
-};
-
-
-
+ 
 
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
