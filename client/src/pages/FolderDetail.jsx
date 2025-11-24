@@ -20,6 +20,10 @@ import {
   MoreVertical,
   Square,
   CheckSquare,
+  File,
+  Disc,
+  Clock,
+  User,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -132,9 +136,8 @@ const PdfThumbnail = ({ url, fileName, fileId }) => {
 const ActionButton = ({ onClick, icon: Icon, color, fullWidth = false }) => (
   <button
     onClick={onClick}
-    className={`${
-      fullWidth ? "col-span-2" : "col-span-1"
-    } p-3 rounded-xl hover:bg-gray-100 transition-all group flex items-center justify-center`}
+    className={`${fullWidth ? "col-span-2" : "col-span-1"
+      } p-3 rounded-xl hover:bg-gray-100 transition-all group flex items-center justify-center`}
   >
     <Icon
       size={16}
@@ -357,7 +360,7 @@ function FolderDetail() {
       try {
         const { data } = await Axios({ ...SummaryApi.getFolder(id) });
         if (data?.success) dispatch(setCurrentFolder(data.data));
-      } catch {}
+      } catch { }
     };
     fetch();
   }, [id, dispatch]);
@@ -442,146 +445,145 @@ function FolderDetail() {
   //   }
   // };
 
+  // Existing handleShare function (unchanged)
+  const handleShare = async (fileUrl, fileName) => {
+    if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    const supported = [
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "webp",
+      "pdf",
+      "mp4",
+      "docx",
+      "txt",
+    ].includes(ext);
 
-  
-
-// Existing handleShare function (unchanged)
-const handleShare = async (fileUrl, fileName) => {
-  if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  const supported = [
-    "jpg",
-    "jpeg",
-    "png",
-    "gif",
-    "webp",
-    "pdf",
-    "mp4",
-    "docx",
-    "txt",
-  ].includes(ext);
-
-  if (supported && navigator.share && location.protocol === "https:") {
-    try {
-      const res = await fetch(fileUrl, { cache: "no-cache" });
-      const blob = await res.blob();
-      const file = new File([blob], fileName, {
-        type: ext === "pdf" ? "application/pdf" : blob.type,
-      });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
-        toast.success("File shared!");
-        return;
-      }
-    } catch {}
-  }
-  if (navigator.share) {
-    await navigator.share({ url: fileUrl, title: fileName });
-    toast.success("Shared!");
-  } else {
-    navigator.clipboard.writeText(fileUrl);
-    toast.success("Link copied!");
-  }
-};
-
-// UPDATED triggerBulkShare: Shares content via ZIP for bulk (one share call)
-const triggerBulkShare = async () => {
-  if (selectedFiles.size === 0) return;
-
-  const filesToShare = files.filter((f) => selectedFiles.has(f._id));
-  const count = filesToShare.length;
-
-  // For single file: Use handleShare (content sharing)
-  if (count === 1) {
-    await handleShare(filesToShare[0].url, filesToShare[0].name);
-    return;
-  }
-
-  // For multiple files: Create ZIP with content and share as one file
-  if (navigator.share && location.protocol === "https:") {
-    try {
-      toast.loading(`Preparing ZIP of ${count} files...`);
-
-      const zip = new JSZip();
-      let loadedCount = 0;
-      let failedFiles = [];
-
-      // Fetch and add each file's content to ZIP
-      const addPromises = filesToShare.map(async (file) => {
-        try {
-          const res = await fetch(file.url, { cache: "no-cache" });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const blob = await res.blob();
-          zip.file(file.name, blob);
-          loadedCount++;
-        } catch (error) {
-          console.warn(`Failed to load ${file.name}:`, error);
-          failedFiles.push(file.name);
+    if (supported && navigator.share && location.protocol === "https:") {
+      try {
+        const res = await fetch(fileUrl, { cache: "no-cache" });
+        const blob = await res.blob();
+        const file = new File([blob], fileName, {
+          type: ext === "pdf" ? "application/pdf" : blob.type,
+        });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: fileName });
+          toast.success("File shared!");
+          return;
         }
-      });
+      } catch { }
+    }
+    if (navigator.share) {
+      await navigator.share({ url: fileUrl, title: fileName });
+      toast.success("Shared!");
+    } else {
+      navigator.clipboard.writeText(fileUrl);
+      toast.success("Link copied!");
+    }
+  };
 
-      await Promise.all(addPromises);
-      toast.dismiss();
+  // UPDATED triggerBulkShare: Shares content via ZIP for bulk (one share call)
+  const triggerBulkShare = async () => {
+    if (selectedFiles.size === 0) return;
 
-      if (loadedCount === 0) {
-        toast.error("Unable to load any files. Falling back to links.");
-      } else {
-        if (failedFiles.length > 0) {
-          toast.warn(
-            `ZIP created with ${loadedCount}/${count} files. Skipped: ${failedFiles.join(
-              ", "
-            )}`
-          );
-        }
+    const filesToShare = files.filter((f) => selectedFiles.has(f._id));
+    const count = filesToShare.length;
 
-        // Generate ZIP blob and share as one file (ONE share call - no gesture error)
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        const zipFile = new File([zipBlob], `shared-files-${Date.now()}.zip`, {
-          type: "application/zip",
+    // For single file: Use handleShare (content sharing)
+    if (count === 1) {
+      await handleShare(filesToShare[0].url, filesToShare[0].name);
+      return;
+    }
+
+    // For multiple files: Create ZIP with content and share as one file
+    if (navigator.share && location.protocol === "https:") {
+      try {
+        toast.loading(`Preparing ZIP of ${count} files...`);
+
+        const zip = new JSZip();
+        let loadedCount = 0;
+        let failedFiles = [];
+
+        // Fetch and add each file's content to ZIP
+        const addPromises = filesToShare.map(async (file) => {
+          try {
+            const res = await fetch(file.url, { cache: "no-cache" });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            zip.file(file.name, blob);
+            loadedCount++;
+          } catch (error) {
+            console.warn(`Failed to load ${file.name}:`, error);
+            failedFiles.push(file.name);
+          }
         });
 
-        if (navigator.canShare?.({ files: [zipFile] })) {
-          await navigator.share({
-            files: [zipFile],
-            title: `Shared Files (${loadedCount})`,
-            text: `ZIP containing files from ${
-              currentFolder?.name || "your storage"
-            }.`,
-          });
-          toast.success(`ZIP shared successfully (${loadedCount} files)!`);
-          return;
+        await Promise.all(addPromises);
+        toast.dismiss();
+
+        if (loadedCount === 0) {
+          toast.error("Unable to load any files. Falling back to links.");
         } else {
-          toast.warn("ZIP sharing not supported. Falling back to links.");
+          if (failedFiles.length > 0) {
+            toast.warn(
+              `ZIP created with ${loadedCount}/${count} files. Skipped: ${failedFiles.join(
+                ", "
+              )}`
+            );
+          }
+
+          // Generate ZIP blob and share as one file (ONE share call - no gesture error)
+          const zipBlob = await zip.generateAsync({ type: "blob" });
+          const zipFile = new File(
+            [zipBlob],
+            `shared-files-${Date.now()}.zip`,
+            {
+              type: "application/zip",
+            }
+          );
+
+          if (navigator.canShare?.({ files: [zipFile] })) {
+            await navigator.share({
+              files: [zipFile],
+              title: `Shared Files (${loadedCount})`,
+              text: `ZIP containing files from ${currentFolder?.name || "your storage"
+                }.`,
+            });
+            toast.success(`ZIP shared successfully (${loadedCount} files)!`);
+            return;
+          } else {
+            toast.warn("ZIP sharing not supported. Falling back to links.");
+          }
         }
+      } catch (err) {
+        toast.dismiss();
+        console.error("ZIP creation failed:", err);
+        toast.error("ZIP creation failed. Falling back to links.");
       }
-    } catch (err) {
-      toast.dismiss();
-      console.error("ZIP creation failed:", err);
-      toast.error("ZIP creation failed. Falling back to links.");
     }
-  }
 
-  // Fallback: Share URL list as text (if ZIP fails or not supported)
-  const urlsText = filesToShare.map((f) => `${f.name}: ${f.url}`).join("\n");
+    // Fallback: Share URL list as text (if ZIP fails or not supported)
+    const urlsText = filesToShare.map((f) => `${f.name}: ${f.url}`).join("\n");
 
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: `Shared Files (${count})`,
-        text: `Direct links to files:\n${urlsText}`,
-      });
-      toast.success(`Shared links to ${count} files!`);
-    } catch (error) {
-      console.warn("Share failed:", error);
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Shared Files (${count})`,
+          text: `Direct links to files:\n${urlsText}`,
+        });
+        toast.success(`Shared links to ${count} files!`);
+      } catch (error) {
+        console.warn("Share failed:", error);
+        navigator.clipboard.writeText(urlsText);
+        toast.info("Links copied!");
+      }
+    } else {
       navigator.clipboard.writeText(urlsText);
-      toast.info("Links copied!");
+      toast.success(`Links to ${count} files copied!`);
     }
-  } else {
-    navigator.clipboard.writeText(urlsText);
-    toast.success(`Links to ${count} files copied!`);
-  }
-};
-
+  };
 
   const triggerBulkDownload = async () => {
     if (selectedFiles.size === 0) return;
@@ -609,8 +611,6 @@ const triggerBulkShare = async () => {
   };
 
   // Function to handle sharing one or more files
-
- 
 
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
@@ -742,6 +742,47 @@ const triggerBulkShare = async () => {
     setTimeout(() => iframe.remove(), 20000);
   };
 
+  const formatBytes = (bytes, decimals = 2) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+  };
+
+  // Helper function to format date (e.g., "Nov 24, 2025")
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+  const getFileIcon = (mimeType) => {
+    if (!mimeType) return <File size={28} className="text-gray-500/80" />;
+
+    // General categories
+    if (mimeType.startsWith("image/"))
+      return <FileImage size={28} className="text-pink-500/80" />;
+    if (mimeType.includes("pdf"))
+      return <FileTypePdf size={28} className="text-red-600/80" />;
+
+    // Microsoft/Standard Documents
+    if (mimeType.includes("word") || mimeType.includes("document"))
+      return <FileTypeDoc size={28} className="text-blue-600/80" />;
+    if (mimeType.includes("excel") || mimeType.includes("spreadsheet"))
+      return <FileTypeXls size={28} className="text-green-600/80" />;
+
+    // Data & Text
+    if (mimeType.includes("csv"))
+      return <FileTypeCsv size={28} className="text-lime-600/80" />;
+    if (mimeType.includes("text"))
+      return <FileText size={28} className="text-gray-500/80" />;
+
+    // Default fallback
+    return <File size={28} className="text-indigo-500/80" />;
+  };
   return (
     <div className="p-4 sm:p-6  min-h-screen relative">
       {/* TOP SELECTION BAR */}
@@ -751,31 +792,29 @@ const triggerBulkShare = async () => {
             initial={{ y: -100 }}
             animate={{ y: 0 }}
             exit={{ y: -100 }}
-            // Use 'inset-x-0' for better coverage, and p-safe-top (if using a safe-area utility)
-            // Otherwise, the default 'top-0 left-0 right-0' is fine.
             className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-2xl"
           >
-            <div className="flex items-center justify-between **px-3 py-3 sm:px-5 sm:py-4**">
+            <div className="flex items-center justify-between px-3 py-3 sm:px-5 sm:py-4">
               {/* LEFT SIDE: Deselect & Count */}
-              <div className="flex items-center **gap-2 sm:gap-4**">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <button
                   onClick={deselectAll}
                   className="p-2 hover:bg-white/20 rounded-full transition"
                 >
                   <X size={24} />
                 </button>
-                <span className="**text-sm sm:text-lg** font-semibold">
+                <span className="text-sm sm:text-lg font-semibold">
                   {selectedFiles.size} selected
                 </span>
               </div>
 
               {/* RIGHT SIDE: Action Buttons */}
-              <div className="flex  items-center gap-4 sm:gap-2">
+              <div className="flex items-center gap-4 sm:gap-2">
                 {/* Bulk Share Button (Icon-only on mobile) */}
                 <button
                   onClick={triggerBulkShare}
                   disabled={selectedFiles.size === 0}
-                  className="flex gap-2 items-center  px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                  className="flex gap-2 items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
                 >
                   <Share2 size={20} />
                   <span className="hidden sm:inline">Share</span>
@@ -814,7 +853,7 @@ const triggerBulkShare = async () => {
                   ) : (
                     <Square size={20} />
                   )}
-                  <span className="**hidden sm:inline**">All</span>
+                  <span className="hidden sm:inline">All</span>
                 </button>
               </div>
             </div>
@@ -828,9 +867,7 @@ const triggerBulkShare = async () => {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            // --- UPDATED CLASSES ---
             className="fixed top-24 lg:right-[500px] flex items-center justify-center z-50 pointer-events-none"
-            // --- INNER CONTENT ---
           >
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-full shadow-2xl font-bold text-lg max-w-full mx-4">
               Selection Mode Activated
@@ -840,12 +877,11 @@ const triggerBulkShare = async () => {
       </AnimatePresence>
       {/* Header */}
       <div
-        className={`flex mt-0 flex-col sm:flex-row justify-between items-center gap-4 mb-6 ${
-          isSelectMode ? "mt-20" : ""
-        }`}
+        className={`flex mt-0 flex-col sm:flex-row justify-between items-center gap-4 mb-6 ${isSelectMode ? "mt-20" : ""
+          }`}
       >
         <div className="text-center sm:text-left">
-          <h2 className="text-2xl  font-semibold dark:text-gray-800 flex items-center gap-2">
+          <h2 className="text-2xl font-semibold dark:text-gray-800 flex items-center gap-2">
             <FolderIcon size={24} className="text-blue-600" />
             {currentFolder?.name || "Folder"}
           </h2>
@@ -874,7 +910,8 @@ const triggerBulkShare = async () => {
           <FileUpload folderId={id} setFiles={setFiles} />
         </div>
       </div>
-      {/* File Grid */}
+
+      {/* --- File Grid --- */}
       <motion.div layout className="flex flex-wrap justify-start gap-8 ">
         {filteredFiles.length === 0 ? (
           <div className="w-full py-16 text-center">
@@ -884,54 +921,69 @@ const triggerBulkShare = async () => {
         ) : (
           filteredFiles.map((file) => {
             const isSelected = selectedFiles.has(file._id);
+
+            const fileExtension =
+              file.name.split(".").pop()?.toUpperCase() || "FILE";
+
             return (
               <motion.div
                 layout
                 key={file._id}
                 id={file._id}
-                className={`relative bg-white w-[130px] sm:w-[160px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between
-                  ${
-                    isSelected
-                      ? "ring-4 ring-blue-500 scale-105 shadow-2xl"
-                      : ""
+                className={`relative bg-white w-[130px] sm:w-[160px] md:w-[210px] h-[220px] rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 p-3 group cursor-pointer flex flex-col justify-between
+                ${isSelected
+                    ? "ring-4 ring-blue-500 scale-[1.03] shadow-3xl"
+                    : ""
                   }
-                `}
+            `}
                 onClick={(e) => {
                   if (editingFileId) {
-                    e.stopPropagation(); // ← BLOCK preview & selection while renaming
+                    e.stopPropagation();
                     return;
                   }
                   handleCardClick(file._id, e);
                 }}
                 onMouseDown={() => {
-                  if (editingFileId) return; // ← BLOCK long-press while renaming
+                  if (editingFileId) return;
                   handleMouseDown(file._id);
                 }}
                 onMouseUp={handleMouseUp}
                 onTouchStart={() => {
-                  if (editingFileId) return; // ← BLOCK long-press on mobile while renaming
+                  if (editingFileId) return;
                   handleMouseDown(file._id);
                 }}
                 onTouchEnd={handleMouseUp}
               >
                 {/* Checkbox */}
                 {(isSelectMode || isSelected) && (
-                  <div className="absolute top-3 left-3 z-40">
+                  <div className="absolute top-3 left-3 z-40 transition-all duration-300">
                     <div
-                      className={`w-7 h-7 rounded-full border-2 ${
-                        isSelected
-                          ? "bg-blue-600 border-blue-600"
-                          : "bg-white border-gray-400"
-                      } flex items-center justify-center transition`}
+                      className={`w-7 h-7 rounded-full border-2 ${isSelected
+                          ? "bg-blue-600 border-blue-600 scale-100"
+                          : "bg-white border-gray-400 scale-90"
+                        } flex items-center justify-center transition`}
                     >
                       {isSelected && <Check size={16} className="text-white" />}
                     </div>
                   </div>
                 )}
 
-                <div className="flex-1">{renderPreview(file)}</div>
+                {/* File Extension Chip (EYE-CATCHING BADGE) */}
+                <div className="absolute bottom-[2.8rem] right-3 z-10 opacity-90 group-hover:opacity-100 transition-opacity">
+                  <span className="bg-gray-800 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md shadow-md select-none tracking-widest">
+                    {fileExtension}
+                  </span>
+                </div>
 
-                {/* 3-Dot Menu */}
+                {/* File Preview (Central Content) */}
+                <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-70 transition-transform duration-300 group-hover:scale-105">
+                    {/* {getFileIcon(file.type)} */}
+                  </div>
+                  {renderPreview(file)}
+                </div>
+
+                {/* 3-Dot Menu (UNCHANGED) */}
                 {!isSelectMode && (
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-50">
                     <button
@@ -949,7 +1001,7 @@ const triggerBulkShare = async () => {
                           initial={{ opacity: 0, scale: 0.8, y: -20 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.8, y: -20 }}
-                          className="absolute h-32 p-0 m-0  right-0 top-12  bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-100 overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden z-50 transform-gpu"
+                          className="absolute h-32 p-0 m-0 right-0 top-12 bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-100 overflow-y-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden z-50 transform-gpu"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex flex-col p-2">
@@ -961,6 +1013,7 @@ const triggerBulkShare = async () => {
                               }}
                               icon={Pencil}
                               color="text-blue-600"
+                              label="Rename"
                             />
                             <ActionButton
                               onClick={() => {
@@ -969,6 +1022,7 @@ const triggerBulkShare = async () => {
                               }}
                               icon={Share2}
                               color="text-emerald-600"
+                              label="Share"
                             />
                             <ActionButton
                               onClick={() => {
@@ -977,6 +1031,7 @@ const triggerBulkShare = async () => {
                               }}
                               icon={Download}
                               color="text-indigo-600"
+                              label="Download"
                             />
                             <ActionButton
                               onClick={() => {
@@ -985,12 +1040,14 @@ const triggerBulkShare = async () => {
                               }}
                               icon={Printer}
                               color="text-gray-700"
+                              label="Print"
                             />
                             <ActionButton
                               onClick={() => triggerSingleDelete(file._id)}
                               icon={Trash2}
                               color="text-red-600"
                               fullWidth
+                              label="Delete"
                             />
                           </div>
                         </motion.div>
@@ -999,7 +1056,8 @@ const triggerBulkShare = async () => {
                   </div>
                 )}
 
-                <div className="mt-3 text-center">
+                {/* File Name / Rename Input */}
+                <div className="mt-1 text-center">
                   {editingFileId === file._id ? (
                     <input
                       ref={inputRef}
@@ -1009,19 +1067,20 @@ const triggerBulkShare = async () => {
                       onKeyDown={(e) =>
                         e.key === "Enter" && handleRename(file._id)
                       }
-                      onClick={(e) => e.stopPropagation()} // ← PREVENT preview
-                      onDoubleClick={(e) => e.stopPropagation()} // ← PREVENT selection
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
                       className="w-full px-2 py-1 text-sm border border-blue-500 rounded-md text-center bg-white shadow-inner outline-none"
                       placeholder="Enter name"
                     />
                   ) : (
                     <p
                       onClick={(e) => {
-                        e.stopPropagation(); // ← PREVENT preview & selection
+                        e.stopPropagation();
                         setEditingFileId(file._id);
                         setNewFileName(file.name);
                       }}
-                      className="text-sm font-medium text-gray-800 truncate cursor-text select-text"
+                      className="text-sm font-semibold text-gray-900 truncate cursor-text select-text"
+                      title={file.name} // Full name visible on hover
                     >
                       {file.name}
                     </p>
@@ -1032,7 +1091,7 @@ const triggerBulkShare = async () => {
           })
         )}
       </motion.div>
-      {/* UNIVERSAL DELETE MODAL */}
+
       <ReactModal
         isOpen={confirmDelete.open}
         onRequestClose={() => setConfirmDelete({ open: false, fileIds: [] })}
@@ -1119,48 +1178,69 @@ const triggerBulkShare = async () => {
               </>
             )}
 
-            <div className="flex-1 relative mt-20 mb-8">
+            <div className="flex-1 relative mb-8">
               {(() => {
                 const ext = selectedFile.name.split(".").pop()?.toLowerCase();
-                if (
-                  ["jpg", "jpeg", "png", "webp", "gif", "svg"].includes(ext)
-                ) {
-                  return (
-                    <div className="h-full flex items-center justify-center p-8">
-                      <Zoom zoomMargin={80}>
-                        <img
-                          src={selectedFile.url}
-                          alt={selectedFile.name}
-                          className="w-full h-full lg:w-[35%] m-auto object-cover rounded-xl shadow-2xl"
-                          draggable={false}
-                        />
-                      </Zoom>
-                    </div>
-                  );
-                }
-                if (["mp4", "webm", "ogg", "mov"].includes(ext)) {
-                  return (
-                    <video
-                      src={selectedFile.url}
-                      controls
-                      autoPlay
-                      loop
-                      playsInline
-                      className="w-full h-full object-contain rounded-2xl"
-                    />
-                  );
-                }
-                if (ext === "pdf") {
-                  return (
-                    <iframe
-                      src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
-                        selectedFile.url
-                      )}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-                      className="w-full h-full  border-0 rounded-2xl"
-                      allowFullScreen
-                    />
-                  );
-                }
+              if (["jpg", "jpeg", "png", "webp", "gif", "svg"].includes(ext)) {
+                return (
+                  <div className="h-full w-full flex items-center justify-center p-8 overflow-hidden">
+                    <Zoom zoomMargin={80}>
+                      <img
+                        src={selectedFile.url}
+                        alt={selectedFile.name}
+                        className="
+                        h-auto max-h-full 
+                        w-auto max-w-full 
+                        max-w-lg 
+                        m-auto 
+                        object-contain 
+                        rounded-xl shadow-2xl
+                    "
+                        draggable={false}
+                      />
+                    </Zoom>
+                  </div>
+                );
+              }
+
+             if (["mp4", "webm", "ogg", "mov"].includes(ext)) {
+               return (
+                 <div className="h-full w-full flex items-center justify-center p-8">
+                   {/* Wrapper to control max size and aspect ratio */}
+                   <div
+                     className="relative w-full max-w-2xl"
+                     style={{ paddingTop: "56.25%" }}
+                   >
+                     {" "}
+                     {/* 16:9 Aspect Ratio (9/16 * 100) */}
+                     <video
+                       src={selectedFile.url}
+                       controls
+                       autoPlay
+                       loop
+                       playsInline
+                       className="absolute top-0 left-0 w-full h-full object-contain rounded-2xl shadow-2xl"
+                     />
+                   </div>
+                 </div>
+               );
+             }
+             if (ext === "pdf") {
+               return (
+                 <div className="h-full w-full mt-9 flex items-center justify-center p-4">
+                   {/* Wrapper to control max width and height */}
+                   <div className="w-full h-full  max-h-full">
+                     <iframe
+                       src={`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(
+                         selectedFile.url
+                       )}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
+                       className="w-full h-full border-0 rounded-2xl shadow-2xl"
+                       allowFullScreen
+                     />
+                   </div>
+                 </div>
+               );
+             }
                 return (
                   <div className="h-full flex items-center justify-center text-white/80">
                     <FileIcon size={80} />
