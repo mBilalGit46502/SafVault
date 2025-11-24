@@ -441,6 +441,113 @@ function FolderDetail() {
     }
   };
 
+  // Function to handle downloading one or more files
+  
+  
+  const triggerBulkDownload = async () => {
+    if (selectedFiles.size === 0) return;
+
+    const filesToDownload = files.filter((f) => selectedFiles.has(f._id));
+    const count = filesToDownload.length;
+
+    // Show a toast only for multiple downloads
+    if (count > 1) {
+      toast.info(
+        `Starting download of ${count} file${count > 1 ? "s" : ""}...`
+      );
+    }
+
+    // Iterate over files and call the single-file download function
+    for (const file of filesToDownload) {
+      await handleDownload(file.url, file.name);
+      // Add a small delay to help browsers manage multiple downloads
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    if (count > 1) {
+      toast.success("Bulk download initiated.");
+    }
+  };
+
+  // Function to handle sharing one or more files
+ const triggerBulkShare = async () => {
+   if (selectedFiles.size === 0) return;
+
+   const fileIds = Array.from(selectedFiles);
+   const count = fileIds.length;
+
+   if (count === 1) {
+     // If only one file is selected, use the single file content share logic for simplicity
+     const file = files.find((f) => f._id === fileIds[0]);
+     if (file) {
+       await handleShare(file.url, file.name);
+     }
+     return;
+   }
+
+   // --- Bulk Share via ZIP Archive (Requires Server Endpoint) ---
+
+   try {
+     toast.loading(`Preparing ${count} files as a single ZIP for sharing...`);
+
+     // 1. Request the server to create and serve a ZIP file
+     const zipRes = await fetch("/api/files/zip-bulk-download", {
+       // ⚠️ This endpoint must exist on your server
+       method: "POST",
+       headers: { "Content-Type": "application/json" },
+       body: JSON.stringify({ fileIds: fileIds, folderId: currentFolder?._id }),
+     });
+
+     if (!zipRes.ok) throw new Error("Failed to create ZIP archive.");
+
+     const zipBlob = await zipRes.blob();
+     const zipFileName = `${
+       currentFolder?.name || "Shared_Files"
+     }_${Date.now()}.zip`;
+
+     const zipFile = new File([zipBlob], zipFileName, {
+       type: "application/zip",
+     });
+
+     // 2. Share the single ZIP file content
+     if (navigator.share && navigator.canShare?.({ files: [zipFile] })) {
+       await navigator.share({
+         files: [zipFile],
+         title: `ZIP Archive: ${zipFileName}`,
+         text: `Sharing ${count} files bundled in a ZIP.`,
+       });
+       toast.success("ZIP archive shared successfully!");
+       return;
+     }
+
+     // Fallback: If share is supported but cannot handle the ZIP file, offer to download it.
+     toast.warn("Sharing failed. Initiating download of the ZIP file instead.");
+     // This assumes you have a separate function to download the file by triggering a download link
+     // For simplicity, we just use the existing single file download logic on the ZIP Blob
+     const a = document.createElement("a");
+     a.href = URL.createObjectURL(zipBlob);
+     a.download = zipFileName;
+     a.click();
+     URL.revokeObjectURL(a.href);
+   } catch (error) {
+     toast.dismiss();
+     console.error("Bulk ZIP share failed:", error);
+
+     // Fallback to Link Share on failure
+     const folderUrl = `${window.location.origin}/folder/${currentFolder?._id}`;
+     if (navigator.share) {
+       await navigator.share({
+         url: folderUrl,
+         title: `Folder: ${currentFolder?.name}`,
+       });
+       toast.error("Sharing failed. Folder link shared instead.");
+     } else {
+       navigator.clipboard.writeText(folderUrl);
+       toast.error("Sharing failed. Folder link copied.");
+     }
+   }
+ };
+
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
 
@@ -572,7 +679,7 @@ function FolderDetail() {
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen relative">
+    <div className="p-4 sm:p-6  min-h-screen relative">
       {/* TOP SELECTION BAR */}
       <AnimatePresence>
         {isSelectMode && (
@@ -580,54 +687,76 @@ function FolderDetail() {
             initial={{ y: -100 }}
             animate={{ y: 0 }}
             exit={{ y: -100 }}
+            // Use 'inset-x-0' for better coverage, and p-safe-top (if using a safe-area utility)
+            // Otherwise, the default 'top-0 left-0 right-0' is fine.
             className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-2xl"
           >
-            <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between **px-3 py-3 sm:px-5 sm:py-4**">
+              {/* LEFT SIDE: Deselect & Count */}
+              <div className="flex items-center **gap-2 sm:gap-4**">
                 <button
                   onClick={deselectAll}
                   className="p-2 hover:bg-white/20 rounded-full transition"
                 >
                   <X size={24} />
                 </button>
-                <span className="text-lg font-semibold">
+                <span className="**text-sm sm:text-lg** font-semibold">
                   {selectedFiles.size} selected
                 </span>
               </div>
-              <div className="flex items-center gap-4">
+
+              {/* RIGHT SIDE: Action Buttons */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                {/* Bulk Share Button (Icon-only on mobile) */}
+                <button
+                  onClick={triggerBulkShare}
+                  disabled={selectedFiles.size === 0}
+                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                >
+                  <Share2 size={20} />
+                  <span className="hidden sm:inline">Share</span>
+                </button>
+
+                {/* Bulk Download Button (Icon-only on mobile) */}
+                <button
+                  onClick={triggerBulkDownload}
+                  disabled={selectedFiles.size === 0}
+                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                >
+                  <Download size={20} />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+
+                {/* Bulk Delete Button (Icon-only on mobile) */}
+                <button
+                  onClick={triggerBulkDelete}
+                  disabled={selectedFiles.size === 0}
+                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-red-500 hover:bg-red-600 rounded-xl transition disabled:opacity-50"
+                >
+                  <Trash2 size={20} />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+                {/* Select All / Deselect All (Icon-only on mobile) */}
                 <button
                   onClick={
                     selectedFiles.size === filteredFiles.length
                       ? deselectAll
                       : selectAll
                   }
-                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition"
+                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition"
                 >
                   {selectedFiles.size === filteredFiles.length ? (
                     <CheckSquare size={20} />
                   ) : (
                     <Square size={20} />
                   )}
-                  <span className="hidden sm:inline">
-                    {selectedFiles.size === filteredFiles.length
-                      ? "Deselect"
-                      : "Select"}{" "}
-                    All
-                  </span>
-                </button>
-                <button
-                  onClick={triggerBulkDelete}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 rounded-xl transition"
-                >
-                  <Trash2 size={20} />
-                  <span className="hidden sm:inline">Delete</span>
+                  <span className="**hidden sm:inline**">All</span>
                 </button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* Selection Toast */}
       <AnimatePresence>
         {showSelectToast && (
@@ -645,7 +774,6 @@ function FolderDetail() {
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* Header */}
       <div
         className={`flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 ${
@@ -653,11 +781,11 @@ function FolderDetail() {
         }`}
       >
         <div className="text-center sm:text-left">
-          <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
+          <h2 className="text-2xl font-semibold dark:text-gray-800 flex items-center gap-2">
             <FolderIcon size={24} className="text-blue-600" />
             {currentFolder?.name || "Folder"}
           </h2>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="dark:text-gray-500 dark:text-white text-sm mt-1">
             {filteredFiles.length} files
           </p>
         </div>
@@ -682,9 +810,8 @@ function FolderDetail() {
           <FileUpload folderId={id} setFiles={setFiles} />
         </div>
       </div>
-
       {/* File Grid */}
-      <motion.div layout className="flex flex-wrap justify-start gap-4">
+      <motion.div layout className="flex flex-wrap justify-start gap-8 ">
         {filteredFiles.length === 0 ? (
           <div className="w-full py-16 text-center">
             <FolderIcon size={50} className="mx-auto text-gray-400" />
@@ -725,7 +852,7 @@ function FolderDetail() {
               >
                 {/* Checkbox */}
                 {(isSelectMode || isSelected) && (
-                  <div className="absolute top-3 left-3 z-50">
+                  <div className="absolute top-3 left-3 z-40">
                     <div
                       className={`w-7 h-7 rounded-full border-2 ${
                         isSelected
@@ -830,7 +957,7 @@ function FolderDetail() {
                         setEditingFileId(file._id);
                         setNewFileName(file.name);
                       }}
-                      className="text-sm font-medium text-gray-800 truncate hover:text-blue-600 hover:underline cursor-text select-text"
+                      className="text-sm font-medium text-gray-800 truncate cursor-text select-text"
                     >
                       {file.name}
                     </p>
@@ -841,7 +968,6 @@ function FolderDetail() {
           })
         )}
       </motion.div>
-
       {/* UNIVERSAL DELETE MODAL */}
       <ReactModal
         isOpen={confirmDelete.open}
@@ -876,7 +1002,6 @@ function FolderDetail() {
           </div>
         </motion.div>
       </ReactModal>
-
       {/* Full Preview Modal */}
       <ReactModal
         isOpen={selectedFileIndex !== null}
