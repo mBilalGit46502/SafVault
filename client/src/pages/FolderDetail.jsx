@@ -840,12 +840,12 @@ const triggerBulkShare = async () => {
       </AnimatePresence>
       {/* Header */}
       <div
-        className={`flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 ${
+        className={`flex mt-0 flex-col sm:flex-row justify-between items-center gap-4 mb-6 ${
           isSelectMode ? "mt-20" : ""
         }`}
       >
         <div className="text-center sm:text-left">
-          <h2 className="text-2xl font-semibold dark:text-gray-800 flex items-center gap-2">
+          <h2 className="text-2xl  font-semibold dark:text-gray-800 flex items-center gap-2">
             <FolderIcon size={24} className="text-blue-600" />
             {currentFolder?.name || "Folder"}
           </h2>

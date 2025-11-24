@@ -323,98 +323,108 @@ function Folder() {
           items={displayFolders.map((f) => f._id)}
           strategy={rectSortingStrategy}
         >
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-6">
-            {displayFolders.map((folder) => (
-              <SortableFolderItem key={folder._id} folder={folder}>
-                <div
-                  className={`group relative flex flex-col items-center justify-center p-6 border rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer
+          <div className=" grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-6">
+            {displayFolders.length === 0 ? (
+              <div className="absolute inset-0 flex items-center ">
+
+              <div className="w-full py-16 flex flex-col items-center justify-center">
+                <FolderIcon size={50} className="text-gray-400" />
+                <p className="text-gray-500 mt-3 text-sm">No files found</p>
+              </div>
+              </div>
+            ) : (
+              displayFolders.map((folder) => (
+                <SortableFolderItem key={folder._id} folder={folder}>
+                  <div
+                    className={`group relative flex flex-col items-center justify-center p-6 border rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-2 transition-all duration-300 cursor-pointer
                   ${
                     isDark
                       ? "bg-gray-800 border-gray-700"
                       : "bg-white border-gray-200"
                   }`}
-                >
-                  <div
-                    onClick={() => navigate(`/folder/${folder._id}`)}
-                    className="bg-orange-100 text-orange-600 p-6 rounded-full group-hover:bg-orange-600 group-hover:text-white transition-all duration-300"
                   >
-                    <FolderIcon size={36} />
-                  </div>
+                    <div
+                      onClick={() => navigate(`/folder/${folder._id}`)}
+                      className="bg-orange-100 text-orange-600 p-6 rounded-full group-hover:bg-orange-600 group-hover:text-white transition-all duration-300"
+                    >
+                      <FolderIcon size={36} />
+                    </div>
 
-                  <div className="mt-4 text-center w-full">
-                    {editingFolderId === folder._id ? (
-                      <input
-                        value={newFolderName}
-                        onChange={(e) => setNewFolderName(e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && handleRename(folder._id)
-                        }
-                        className={`border rounded-lg px-3 py-2 text-sm text-center w-full outline-none
+                    <div className="mt-4 text-center w-full">
+                      {editingFolderId === folder._id ? (
+                        <input
+                          value={newFolderName}
+                          onChange={(e) => setNewFolderName(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleRename(folder._id)
+                          }
+                          className={`border rounded-lg px-3 py-2 text-sm text-center w-full outline-none
                           ${
                             isDark
                               ? "bg-gray-700 border-gray-600 text-white"
                               : "bg-white border-gray-300 text-gray-800"
                           }`}
-                        autoFocus
-                      />
-                    ) : (
-                      <p
-                        className={`text-sm font-medium truncate group-hover:text-orange-500 transition
+                          autoFocus
+                        />
+                      ) : (
+                        <p
+                          className={`text-sm font-medium truncate group-hover:text-orange-500 transition
                           ${isDark ? "text-gray-300" : "text-gray-700"}`}
-                        onDoubleClick={() => {
-                          setEditingFolderId(folder._id);
-                          setNewFolderName(folder.name);
-                        }}
-                      >
-                        {folder.name || "Untitled"}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                    {editingFolderId === folder._id ? (
-                      <>
-                        <button
-                          onClick={() => handleRename(folder._id)}
-                          className="bg-green-500 text-white p-2 rounded-full hover:bg-green-600 shadow-lg"
-                        >
-                          <Check size={16} />
-                        </button>
-                        <button
-                          onClick={() => setEditingFolderId(null)}
-                          className="bg-gray-500 text-white p-2 rounded-full hover:bg-gray-600 shadow-lg"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => {
+                          onDoubleClick={() => {
                             setEditingFolderId(folder._id);
                             setNewFolderName(folder.name);
                           }}
-                          className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 shadow-lg"
                         >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() =>
-                            setConfirmDelete({
-                              open: true,
-                              folderId: folder._id,
-                            })
-                          }
-                          className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-lg"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </>
-                    )}
+                          {folder.name || "Untitled"}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                      {editingFolderId === folder._id ? (
+                        <>
+                          <button
+                            onClick={() => handleRename(folder._id)}
+                            className="bg-green-500 text-white p-2 rounded-full hover:bg-green-600 shadow-lg"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            onClick={() => setEditingFolderId(null)}
+                            className="bg-gray-500 text-white p-2 rounded-full hover:bg-gray-600 shadow-lg"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditingFolderId(folder._id);
+                              setNewFolderName(folder.name);
+                            }}
+                            className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 shadow-lg"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setConfirmDelete({
+                                open: true,
+                                folderId: folder._id,
+                              })
+                            }
+                            className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-lg"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </SortableFolderItem>
-            ))}
+                </SortableFolderItem>
+              ))
+            )}
           </div>
         </SortableContext>
       </DndContext>
