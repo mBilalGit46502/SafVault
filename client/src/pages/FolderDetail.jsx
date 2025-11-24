@@ -742,47 +742,7 @@ function FolderDetail() {
     setTimeout(() => iframe.remove(), 20000);
   };
 
-  const formatBytes = (bytes, decimals = 2) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
-  };
 
-  // Helper function to format date (e.g., "Nov 24, 2025")
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-  const getFileIcon = (mimeType) => {
-    if (!mimeType) return <File size={28} className="text-gray-500/80" />;
-
-    // General categories
-    if (mimeType.startsWith("image/"))
-      return <FileImage size={28} className="text-pink-500/80" />;
-    if (mimeType.includes("pdf"))
-      return <FileTypePdf size={28} className="text-red-600/80" />;
-
-    // Microsoft/Standard Documents
-    if (mimeType.includes("word") || mimeType.includes("document"))
-      return <FileTypeDoc size={28} className="text-blue-600/80" />;
-    if (mimeType.includes("excel") || mimeType.includes("spreadsheet"))
-      return <FileTypeXls size={28} className="text-green-600/80" />;
-
-    // Data & Text
-    if (mimeType.includes("csv"))
-      return <FileTypeCsv size={28} className="text-lime-600/80" />;
-    if (mimeType.includes("text"))
-      return <FileText size={28} className="text-gray-500/80" />;
-
-    // Default fallback
-    return <File size={28} className="text-indigo-500/80" />;
-  };
   return (
     <div className="p-4 sm:p-6  min-h-screen relative">
       {/* TOP SELECTION BAR */}
@@ -926,7 +886,7 @@ function FolderDetail() {
               file.name.split(".").pop()?.toUpperCase() || "FILE";
 
             return (
-              <motion.div
+              <div
                 layout
                 key={file._id}
                 id={file._id}
@@ -1086,7 +1046,7 @@ function FolderDetail() {
                     </p>
                   )}
                 </div>
-              </motion.div>
+              </div>
             );
           })
         )}
