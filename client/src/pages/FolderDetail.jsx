@@ -1143,7 +1143,7 @@ function FolderDetail() {
                 const ext = selectedFile.name.split(".").pop()?.toLowerCase();
               if (["jpg", "jpeg", "png", "webp", "gif", "svg"].includes(ext)) {
                 return (
-                  <div className="h-full w-full flex items-center justify-center p-8 overflow-hidden">
+                  <div className="h-full w-full flex items-center justify-center pt-16 overflow-hidden">
                     <Zoom zoomMargin={80}>
                       <img
                         src={selectedFile.url}
@@ -1165,11 +1165,11 @@ function FolderDetail() {
 
              if (["mp4", "webm", "ogg", "mov"].includes(ext)) {
                return (
-                 <div className="h-full w-full flex items-center justify-center p-8">
+                 <div className="h-full w-full flex items-center justify-center p-4">
                    {/* Wrapper to control max size and aspect ratio */}
                    <div
-                     className="relative w-full max-w-2xl"
-                     style={{ paddingTop: "56.25%" }}
+                     className=" w-full max-w-xl lg:px-24 lg:pt-10 "
+                    //  style={ {"sm:paddingTop: 20.25%" }}
                    >
                      {" "}
                      {/* 16:9 Aspect Ratio (9/16 * 100) */}
@@ -1179,7 +1179,7 @@ function FolderDetail() {
                        autoPlay
                        loop
                        playsInline
-                       className="absolute top-0 left-0 w-full h-full object-contain rounded-2xl shadow-2xl"
+                       className=" w-full h-full object-contain rounded-2xl shadow-2xl"
                      />
                    </div>
                  </div>
