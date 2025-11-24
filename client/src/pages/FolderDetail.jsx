@@ -442,82 +442,146 @@ function FolderDetail() {
   //   }
   // };
 
-  // Function to handle downloading one or more files
 
   
-  // Existing handleShare function (unchanged - works for single files)
-  const handleShare = async (fileUrl, fileName) => {
-    if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
-    const ext = fileName.split(".").pop()?.toLowerCase();
-    const supported = [
-      "jpg",
-      "jpeg",
-      "png",
-      "gif",
-      "webp",
-      "pdf",
-      "mp4",
-      "docx",
-      "txt",
-    ].includes(ext);
 
-    if (supported && navigator.share && location.protocol === "https:") {
-      try {
-        const res = await fetch(fileUrl, { cache: "no-cache" });
-        const blob = await res.blob();
-        const file = new File([blob], fileName, {
-          type: ext === "pdf" ? "application/pdf" : blob.type,
-        });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: fileName });
-          toast.success("File shared!");
-          return;
-        }
-      } catch {}
-    }
-    if (navigator.share) {
-      await navigator.share({ url: fileUrl, title: fileName });
-      toast.success("Shared!");
-    } else {
-      navigator.clipboard.writeText(fileUrl);
-      toast.success("Link copied!");
-    }
-  };
+// Existing handleShare function (unchanged)
+const handleShare = async (fileUrl, fileName) => {
+  if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  const supported = [
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "pdf",
+    "mp4",
+    "docx",
+    "txt",
+  ].includes(ext);
 
-  // FIXED triggerBulkShare function (resolves NotAllowedError and bulk issues)
-  const triggerBulkShare = async () => {
-    if (selectedFiles.size === 0) return;
-
-    const filesToShare = files.filter((f) => selectedFiles.has(f._id));
-    const count = filesToShare.length;
-
-    // For single file: Use handleShare (content or URL sharing)
-    if (count === 1) {
-      await handleShare(filesToShare[0].url, filesToShare[0].name);
-      return;
-    }
-
-    // For multiple files: Share a list of URLs as text (ONE share call - no loops, no errors)
-    const urlsText = filesToShare.map((f) => `${f.name}: ${f.url}`).join("\n"); // Format: "filename: url"
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Shared Files (${count})`,
-          text: `Direct links to files:\n${urlsText}`,
-        });
-        toast.success(`Shared links to ${count} files!`);
-      } catch (error) {
-        console.warn("Share failed:", error);
-        toast.error("Sharing failed. Copying links to clipboard.");
-        navigator.clipboard.writeText(urlsText);
-        toast.info("Links copied!");
+  if (supported && navigator.share && location.protocol === "https:") {
+    try {
+      const res = await fetch(fileUrl, { cache: "no-cache" });
+      const blob = await res.blob();
+      const file = new File([blob], fileName, {
+        type: ext === "pdf" ? "application/pdf" : blob.type,
+      });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: fileName });
+        toast.success("File shared!");
+        return;
       }
-    } else {
-      navigator.clipboard.writeText(urlsText);
-      toast.success(`Links to ${count} files copied!`);
+    } catch {}
+  }
+  if (navigator.share) {
+    await navigator.share({ url: fileUrl, title: fileName });
+    toast.success("Shared!");
+  } else {
+    navigator.clipboard.writeText(fileUrl);
+    toast.success("Link copied!");
+  }
+};
+
+// UPDATED triggerBulkShare: Shares content via ZIP for bulk (one share call)
+const triggerBulkShare = async () => {
+  if (selectedFiles.size === 0) return;
+
+  const filesToShare = files.filter((f) => selectedFiles.has(f._id));
+  const count = filesToShare.length;
+
+  // For single file: Use handleShare (content sharing)
+  if (count === 1) {
+    await handleShare(filesToShare[0].url, filesToShare[0].name);
+    return;
+  }
+
+  // For multiple files: Create ZIP with content and share as one file
+  if (navigator.share && location.protocol === "https:") {
+    try {
+      toast.loading(`Preparing ZIP of ${count} files...`);
+
+      const zip = new JSZip();
+      let loadedCount = 0;
+      let failedFiles = [];
+
+      // Fetch and add each file's content to ZIP
+      const addPromises = filesToShare.map(async (file) => {
+        try {
+          const res = await fetch(file.url, { cache: "no-cache" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          zip.file(file.name, blob);
+          loadedCount++;
+        } catch (error) {
+          console.warn(`Failed to load ${file.name}:`, error);
+          failedFiles.push(file.name);
+        }
+      });
+
+      await Promise.all(addPromises);
+      toast.dismiss();
+
+      if (loadedCount === 0) {
+        toast.error("Unable to load any files. Falling back to links.");
+      } else {
+        if (failedFiles.length > 0) {
+          toast.warn(
+            `ZIP created with ${loadedCount}/${count} files. Skipped: ${failedFiles.join(
+              ", "
+            )}`
+          );
+        }
+
+        // Generate ZIP blob and share as one file (ONE share call - no gesture error)
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const zipFile = new File([zipBlob], `shared-files-${Date.now()}.zip`, {
+          type: "application/zip",
+        });
+
+        if (navigator.canShare?.({ files: [zipFile] })) {
+          await navigator.share({
+            files: [zipFile],
+            title: `Shared Files (${loadedCount})`,
+            text: `ZIP containing files from ${
+              currentFolder?.name || "your storage"
+            }.`,
+          });
+          toast.success(`ZIP shared successfully (${loadedCount} files)!`);
+          return;
+        } else {
+          toast.warn("ZIP sharing not supported. Falling back to links.");
+        }
+      }
+    } catch (err) {
+      toast.dismiss();
+      console.error("ZIP creation failed:", err);
+      toast.error("ZIP creation failed. Falling back to links.");
     }
-  };
+  }
+
+  // Fallback: Share URL list as text (if ZIP fails or not supported)
+  const urlsText = filesToShare.map((f) => `${f.name}: ${f.url}`).join("\n");
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: `Shared Files (${count})`,
+        text: `Direct links to files:\n${urlsText}`,
+      });
+      toast.success(`Shared links to ${count} files!`);
+    } catch (error) {
+      console.warn("Share failed:", error);
+      navigator.clipboard.writeText(urlsText);
+      toast.info("Links copied!");
+    }
+  } else {
+    navigator.clipboard.writeText(urlsText);
+    toast.success(`Links to ${count} files copied!`);
+  }
+};
+
 
   const triggerBulkDownload = async () => {
     if (selectedFiles.size === 0) return;
