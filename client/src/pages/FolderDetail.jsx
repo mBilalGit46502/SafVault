@@ -31,6 +31,7 @@ import { addFileToFolder, setCurrentFolder } from "../storeSlices/folderSlice";
 import { motion, AnimatePresence } from "framer-motion";
 import * as pdfjsLib from "pdfjs-dist";
 import { get, set } from "idb-keyval";
+import JSZip from "jszip"; // Add this import
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -470,125 +471,40 @@ function FolderDetail() {
   };
 
   // Function to handle sharing one or more files
+
 const triggerBulkShare = async () => {
   if (selectedFiles.size === 0) return;
 
   const filesToShare = files.filter((f) => selectedFiles.has(f._id));
   const count = filesToShare.length;
-  let fileShareAttempted = false;
 
-  // --- 1. Attempt Native File Sharing (Single or Multiple) ---
-  if (navigator.share && location.protocol === "https:") {
-    fileShareAttempted = true;
-    try {
-      toast.loading(
-        `Preparing ${count} file${count > 1 ? "s" : ""} for sharing...`
-      );
-
-      // Fetch all file contents with better error tracking
-      const filePromises = filesToShare.map(async (file) => {
-        try {
-          const res = await fetch(file.url, { cache: "no-cache" });
-          if (!res.ok) throw new Error(`HTTP ${res.status} for ${file.name}`);
-          const blob = await res.blob();
-          const ext = file.name.split(".").pop()?.toLowerCase();
-          return new File([blob], file.name, {
-            type: ext === "pdf" ? "application/pdf" : blob.type,
-          });
-        } catch (error) {
-          console.warn(`Failed to load ${file.name}:`, error);
-          return null; // Skip failed files
-        }
-      });
-
-      const loadedFiles = (await Promise.all(filePromises)).filter(
-        (f) => f !== null
-      );
-      toast.dismiss();
-
-      // Provide feedback on partial success
-      if (loadedFiles.length === 0) {
-        toast.error("Unable to load any files for sharing.");
-        // Skip to fallback
-      } else if (loadedFiles.length < count) {
-        toast.warn(
-          `Only ${loadedFiles.length}/${count} files loaded. Sharing available ones.`
-        );
-      }
-
-      // Check and attempt share
-      if (
-        loadedFiles.length > 0 &&
-        navigator.canShare?.({ files: loadedFiles })
-      ) {
-        await navigator.share({
-          files: loadedFiles,
-          title: `Shared Files (${loadedFiles.length})`,
-          text: `Content sharing from ${
-            currentFolder?.name || "your storage"
-          }.`,
-        });
-        toast.success(
-          `Shared ${loadedFiles.length} file${
-            loadedFiles.length > 1 ? "s" : ""
-          } successfully!`
-        );
-        return; // Success
-      } else if (loadedFiles.length > 0) {
-        toast.warn(
-          "Native sharing not supported for these files. Falling back to link sharing."
-        );
-      }
-    } catch (err) {
-      toast.dismiss();
-      console.error("Native file share failed:", err);
-      toast.error("File sharing failed. Trying link sharing.");
-    }
-  }
-
-  // --- 2. Fallback: Share Links (Enhanced) ---
-  let linkUrl, linkTitle, linkMessage;
-
+  // For single file: Use handleShare directly (no changes needed)
   if (count === 1) {
-    linkUrl = filesToShare[0].url;
-    linkTitle = filesToShare[0].name;
-    linkMessage = "Sharing file link instead.";
-  } else if (currentFolder?._id) {
-    // For multiple files, share the folder URL
-    linkUrl = `${window.location.origin}/folder/${currentFolder._id}`;
-    linkTitle = `Folder: ${currentFolder.name} (${count} files)`;
-    linkMessage = "Sharing folder link for multiple files.";
-  } else {
-    // Last resort: Generate a temporary shareable page or list URLs
-    // Option A: Create a comma-separated list of URLs (if short)
-    const urls = filesToShare.map((f) => f.url).join(", ");
-    if (urls.length < 2000) {
-      // Avoid overly long URLs
-      linkUrl = urls;
-      linkTitle = `Shared Files (${count})`;
-      linkMessage = "Sharing list of file links.";
-    } else {
-      // Option B: Suggest emailing or manual copy (if too many)
-      toast.error(
-        "Too many files to share as links. Consider downloading and attaching manually."
-      );
-      return;
+    await handleShare(filesToShare[0].url, filesToShare[0].name);
+    return;
+  }
+
+  // For multiple files: Share each one individually (like single sharing)
+  toast.info(`Sharing ${count} files one by one...`);
+
+  for (let i = 0; i < filesToShare.length; i++) {
+    const file = filesToShare[i];
+    try {
+      await handleShare(file.url, file.name);
+      // Add a delay to avoid overwhelming the browser/share dialogs
+      if (i < filesToShare.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500)); // 500ms delay
+      }
+    } catch (error) {
+      console.warn(`Failed to share ${file.name}:`, error);
+      toast.error(`Failed to share ${file.name}`);
     }
   }
 
-  // Execute fallback
-  if (navigator.share) {
-    await navigator.share({
-      url: linkUrl,
-      title: linkTitle,
-      text: linkMessage,
-    });
-    toast.info(linkMessage);
-  } else {
-    navigator.clipboard.writeText(linkUrl);
-    toast.info(`Link copied: ${linkMessage}`);
-  }
+  toast.success(`Finished sharing ${count} files!`);
 };
+
+
 
 
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
