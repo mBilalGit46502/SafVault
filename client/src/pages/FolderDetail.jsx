@@ -160,6 +160,9 @@ function FolderDetail() {
     fileIds: [], // Array of file IDs to delete
   });
 
+  const [preparedZipFile, setPreparedZipFile] = useState(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+  // const { id } = useParams();
   // ────────────────────── SELECTION MODE ──────────────────────
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -442,63 +445,69 @@ function FolderDetail() {
   //   }
   // };
 
+  // Existing handleShare function (unchanged)
+  const handleShare = async (fileUrl, fileName) => {
+    if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    const supported = [
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "webp",
+      "pdf",
+      "mp4",
+      "docx",
+      "txt",
+    ].includes(ext);
 
-  
+    if (supported && navigator.share && location.protocol === "https:") {
+      try {
+        const res = await fetch(fileUrl, { cache: "no-cache" });
+        const blob = await res.blob();
+        const file = new File([blob], fileName, {
+          type: ext === "pdf" ? "application/pdf" : blob.type,
+        });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: fileName });
+          toast.success("File shared!");
+          return;
+        }
+      } catch {}
+    }
+    if (navigator.share) {
+      await navigator.share({ url: fileUrl, title: fileName });
+      toast.success("Shared!");
+    } else {
+      navigator.clipboard.writeText(fileUrl);
+      toast.success("Link copied!");
+    }
+  };
 
-// Existing handleShare function (unchanged)
-const handleShare = async (fileUrl, fileName) => {
-  if (!fileUrl || !isValidUrl(fileUrl)) return toast.error("Invalid file");
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  const supported = [
-    "jpg",
-    "jpeg",
-    "png",
-    "gif",
-    "webp",
-    "pdf",
-    "mp4",
-    "docx",
-    "txt",
-  ].includes(ext);
+  const prepareBulkShare = async () => {
+    if (selectedFiles.size === 0 || isPreparing) return;
 
-  if (supported && navigator.share && location.protocol === "https:") {
-    try {
-      const res = await fetch(fileUrl, { cache: "no-cache" });
-      const blob = await res.blob();
-      const file = new File([blob], fileName, {
-        type: ext === "pdf" ? "application/pdf" : blob.type,
-      });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
-        toast.success("File shared!");
-        return;
-      }
-    } catch {}
-  }
-  if (navigator.share) {
-    await navigator.share({ url: fileUrl, title: fileName });
-    toast.success("Shared!");
-  } else {
-    navigator.clipboard.writeText(fileUrl);
-    toast.success("Link copied!");
-  }
-};
+    const filesToShare = files.filter((f) => selectedFiles.has(f._id));
+    const count = filesToShare.length;
 
-// UPDATED triggerBulkShare: Shares content via ZIP for bulk (one share call)
-const triggerBulkShare = async () => {
-  if (selectedFiles.size === 0) return;
+    // 1. Single File: Use the existing handler (this is fast)
+    if (count === 1) {
+      await handleShare(filesToShare[0].url, filesToShare[0].name);
+      return;
+    }
 
-  const filesToShare = files.filter((f) => selectedFiles.has(f._id));
-  const count = filesToShare.length;
+    // Check Web Share API support
+    if (!navigator.share || location.protocol !== "https:") {
+      toast.error(
+        "Content sharing failed: Web Share API is unavailable or not over HTTPS."
+      );
+      return;
+    }
 
-  // For single file: Use handleShare (content sharing)
-  if (count === 1) {
-    await handleShare(filesToShare[0].url, filesToShare[0].name);
-    return;
-  }
+    // --- Start Preparation Phase ---
+    setIsPreparing(true);
+    setPreparedZipFile(null); // Clear previous file
 
-  // For multiple files: Create ZIP with content and share as one file
-  if (navigator.share && location.protocol === "https:") {
     try {
       toast.loading(`Preparing ZIP of ${count} files...`);
 
@@ -506,7 +515,7 @@ const triggerBulkShare = async () => {
       let loadedCount = 0;
       let failedFiles = [];
 
-      // Fetch and add each file's content to ZIP
+      // Fetch and add each file's content to ZIP asynchronously
       const addPromises = filesToShare.map(async (file) => {
         try {
           const res = await fetch(file.url, { cache: "no-cache" });
@@ -524,64 +533,66 @@ const triggerBulkShare = async () => {
       toast.dismiss();
 
       if (loadedCount === 0) {
-        toast.error("Unable to load any files. Falling back to links.");
-      } else {
-        if (failedFiles.length > 0) {
-          toast.warn(
-            `ZIP created with ${loadedCount}/${count} files. Skipped: ${failedFiles.join(
-              ", "
-            )}`
-          );
-        }
-
-        // Generate ZIP blob and share as one file (ONE share call - no gesture error)
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        const zipFile = new File([zipBlob], `shared-files-${Date.now()}.zip`, {
-          type: "application/zip",
-        });
-
-        if (navigator.canShare?.({ files: [zipFile] })) {
-          await navigator.share({
-            files: [zipFile],
-            title: `Shared Files (${loadedCount})`,
-            text: `ZIP containing files from ${
-              currentFolder?.name || "your storage"
-            }.`,
-          });
-          toast.success(`ZIP shared successfully (${loadedCount} files)!`);
-          return;
-        } else {
-          toast.warn("ZIP sharing not supported. Falling back to links.");
-        }
+        toast.error("Unable to load any files. Content sharing failed.");
+        return;
       }
-    } catch (err) {
-      toast.dismiss();
-      console.error("ZIP creation failed:", err);
-      toast.error("ZIP creation failed. Falling back to links.");
-    }
-  }
 
-  // Fallback: Share URL list as text (if ZIP fails or not supported)
-  const urlsText = filesToShare.map((f) => `${f.name}: ${f.url}`).join("\n");
+      if (failedFiles.length > 0) {
+        toast.warn(
+          `ZIP created with ${loadedCount}/${count} files. Skipped: ${failedFiles.join(
+            ", "
+          )}`
+        );
+      }
 
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: `Shared Files (${count})`,
-        text: `Direct links to files:\n${urlsText}`,
+      // Generate ZIP blob and create the File object
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipFile = new File([zipBlob], `shared-files-${Date.now()}.zip`, {
+        type: "application/zip",
       });
-      toast.success(`Shared links to ${count} files!`);
-    } catch (error) {
-      console.warn("Share failed:", error);
-      navigator.clipboard.writeText(urlsText);
-      toast.info("Links copied!");
-    }
-  } else {
-    navigator.clipboard.writeText(urlsText);
-    toast.success(`Links to ${count} files copied!`);
-  }
-};
 
+      // --- CRITICAL: Store the prepared file in state for later sharing ---
+      setPreparedZipFile(zipFile);
+      toast.success(`ZIP for ${loadedCount} files is ready to share!`);
+    } catch (err) {
+      console.error("ZIP creation failed:", err);
+      toast.error("Content preparation failed.");
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const activateShare = async () => {
+    if (!preparedZipFile || isPreparing) return;
+
+    // Check one last time before calling the native API
+    if (!navigator.canShare?.({ files: [preparedZipFile] })) {
+      toast.error("File sharing not supported by your device's sharing menu.");
+      setPreparedZipFile(null); // Clear the file as it can't be shared this way
+      return;
+    }
+
+    try {
+      // This call is now IMMEDIATE upon user click, preventing the NotAllowedError!
+      await navigator.share({
+        files: [preparedZipFile],
+        title: `Shared Files (${preparedZipFile.name})`,
+        text: `ZIP containing files from ${
+          currentFolder?.name || "your storage"
+        }.`,
+      });
+      toast.success(`ZIP shared successfully!`);
+      // Clear the file from state after successful share
+      setPreparedZipFile(null);
+    } catch (error) {
+      // Typically AbortError if the user closes the share dialog
+      if (error.name !== "AbortError") {
+        console.error("Sharing failed:", error);
+        toast.error("Sharing failed. Try again.");
+      }
+    }
+  };
+  // ────────────────────────────────────────────────────────────────────────────────
 
   const triggerBulkDownload = async () => {
     if (selectedFiles.size === 0) return;
@@ -609,8 +620,6 @@ const triggerBulkShare = async () => {
   };
 
   // Function to handle sharing one or more files
-
- 
 
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
@@ -773,14 +782,28 @@ const triggerBulkShare = async () => {
               <div className="flex  items-center gap-4 sm:gap-2">
                 {/* Bulk Share Button (Icon-only on mobile) */}
                 <button
-                  onClick={triggerBulkShare}
-                  disabled={selectedFiles.size === 0}
-                  className="flex gap-2 items-center  px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                  onClick={preparedZipFile ? activateShare : prepareBulkShare}
+                  disabled={selectedFiles.size === 0 || isPreparing}
+                  className={`flex gap-2 items-center px-2 py-2 sm:px-3 sm:py-2 rounded-xl transition disabled:opacity-50 ${
+                    preparedZipFile
+                      ? "bg-green-500 hover:bg-green-600" // Ready to share: use a distinctive color
+                      : "bg-white/20 hover:bg-white/30"
+                  }`}
                 >
-                  <Share2 size={20} />
-                  <span className="hidden sm:inline">Share</span>
-                </button>
+                  {isPreparing ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                  ) : (
+                    <Share2 size={20} />
+                  )}
 
+                  <span className="hidden sm:inline">
+                    {isPreparing
+                      ? "Zipping..."
+                      : preparedZipFile
+                      ? "Share Ready ZIP"
+                      : "Prepare Share"}
+                  </span>
+                </button>
                 {/* Bulk Download Button (Icon-only on mobile) */}
                 <button
                   onClick={triggerBulkDownload}
@@ -790,7 +813,6 @@ const triggerBulkShare = async () => {
                   <Download size={20} />
                   <span className="hidden sm:inline">Download</span>
                 </button>
-
                 {/* Bulk Delete Button (Icon-only on mobile) */}
                 <button
                   onClick={triggerBulkDelete}
