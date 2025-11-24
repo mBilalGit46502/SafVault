@@ -470,83 +470,126 @@ function FolderDetail() {
   };
 
   // Function to handle sharing one or more files
- const triggerBulkShare = async () => {
-   if (selectedFiles.size === 0) return;
+const triggerBulkShare = async () => {
+  if (selectedFiles.size === 0) return;
 
-   const fileIds = Array.from(selectedFiles);
-   const count = fileIds.length;
+  const filesToShare = files.filter((f) => selectedFiles.has(f._id));
+  const count = filesToShare.length;
+  let fileShareAttempted = false;
 
-   if (count === 1) {
-     // If only one file is selected, use the single file content share logic for simplicity
-     const file = files.find((f) => f._id === fileIds[0]);
-     if (file) {
-       await handleShare(file.url, file.name);
-     }
-     return;
-   }
+  // --- 1. Attempt Native File Sharing (Single or Multiple) ---
+  if (navigator.share && location.protocol === "https:") {
+    fileShareAttempted = true;
+    try {
+      toast.loading(
+        `Preparing ${count} file${count > 1 ? "s" : ""} for sharing...`
+      );
 
-   // --- Bulk Share via ZIP Archive (Requires Server Endpoint) ---
+      // Fetch all file contents with better error tracking
+      const filePromises = filesToShare.map(async (file) => {
+        try {
+          const res = await fetch(file.url, { cache: "no-cache" });
+          if (!res.ok) throw new Error(`HTTP ${res.status} for ${file.name}`);
+          const blob = await res.blob();
+          const ext = file.name.split(".").pop()?.toLowerCase();
+          return new File([blob], file.name, {
+            type: ext === "pdf" ? "application/pdf" : blob.type,
+          });
+        } catch (error) {
+          console.warn(`Failed to load ${file.name}:`, error);
+          return null; // Skip failed files
+        }
+      });
 
-   try {
-     toast.loading(`Preparing ${count} files as a single ZIP for sharing...`);
+      const loadedFiles = (await Promise.all(filePromises)).filter(
+        (f) => f !== null
+      );
+      toast.dismiss();
 
-     // 1. Request the server to create and serve a ZIP file
-     const zipRes = await fetch("/api/files/zip-bulk-download", {
-       // ⚠️ This endpoint must exist on your server
-       method: "POST",
-       headers: { "Content-Type": "application/json" },
-       body: JSON.stringify({ fileIds: fileIds, folderId: currentFolder?._id }),
-     });
+      // Provide feedback on partial success
+      if (loadedFiles.length === 0) {
+        toast.error("Unable to load any files for sharing.");
+        // Skip to fallback
+      } else if (loadedFiles.length < count) {
+        toast.warn(
+          `Only ${loadedFiles.length}/${count} files loaded. Sharing available ones.`
+        );
+      }
 
-     if (!zipRes.ok) throw new Error("Failed to create ZIP archive.");
+      // Check and attempt share
+      if (
+        loadedFiles.length > 0 &&
+        navigator.canShare?.({ files: loadedFiles })
+      ) {
+        await navigator.share({
+          files: loadedFiles,
+          title: `Shared Files (${loadedFiles.length})`,
+          text: `Content sharing from ${
+            currentFolder?.name || "your storage"
+          }.`,
+        });
+        toast.success(
+          `Shared ${loadedFiles.length} file${
+            loadedFiles.length > 1 ? "s" : ""
+          } successfully!`
+        );
+        return; // Success
+      } else if (loadedFiles.length > 0) {
+        toast.warn(
+          "Native sharing not supported for these files. Falling back to link sharing."
+        );
+      }
+    } catch (err) {
+      toast.dismiss();
+      console.error("Native file share failed:", err);
+      toast.error("File sharing failed. Trying link sharing.");
+    }
+  }
 
-     const zipBlob = await zipRes.blob();
-     const zipFileName = `${
-       currentFolder?.name || "Shared_Files"
-     }_${Date.now()}.zip`;
+  // --- 2. Fallback: Share Links (Enhanced) ---
+  let linkUrl, linkTitle, linkMessage;
 
-     const zipFile = new File([zipBlob], zipFileName, {
-       type: "application/zip",
-     });
+  if (count === 1) {
+    linkUrl = filesToShare[0].url;
+    linkTitle = filesToShare[0].name;
+    linkMessage = "Sharing file link instead.";
+  } else if (currentFolder?._id) {
+    // For multiple files, share the folder URL
+    linkUrl = `${window.location.origin}/folder/${currentFolder._id}`;
+    linkTitle = `Folder: ${currentFolder.name} (${count} files)`;
+    linkMessage = "Sharing folder link for multiple files.";
+  } else {
+    // Last resort: Generate a temporary shareable page or list URLs
+    // Option A: Create a comma-separated list of URLs (if short)
+    const urls = filesToShare.map((f) => f.url).join(", ");
+    if (urls.length < 2000) {
+      // Avoid overly long URLs
+      linkUrl = urls;
+      linkTitle = `Shared Files (${count})`;
+      linkMessage = "Sharing list of file links.";
+    } else {
+      // Option B: Suggest emailing or manual copy (if too many)
+      toast.error(
+        "Too many files to share as links. Consider downloading and attaching manually."
+      );
+      return;
+    }
+  }
 
-     // 2. Share the single ZIP file content
-     if (navigator.share && navigator.canShare?.({ files: [zipFile] })) {
-       await navigator.share({
-         files: [zipFile],
-         title: `ZIP Archive: ${zipFileName}`,
-         text: `Sharing ${count} files bundled in a ZIP.`,
-       });
-       toast.success("ZIP archive shared successfully!");
-       return;
-     }
+  // Execute fallback
+  if (navigator.share) {
+    await navigator.share({
+      url: linkUrl,
+      title: linkTitle,
+      text: linkMessage,
+    });
+    toast.info(linkMessage);
+  } else {
+    navigator.clipboard.writeText(linkUrl);
+    toast.info(`Link copied: ${linkMessage}`);
+  }
+};
 
-     // Fallback: If share is supported but cannot handle the ZIP file, offer to download it.
-     toast.warn("Sharing failed. Initiating download of the ZIP file instead.");
-     // This assumes you have a separate function to download the file by triggering a download link
-     // For simplicity, we just use the existing single file download logic on the ZIP Blob
-     const a = document.createElement("a");
-     a.href = URL.createObjectURL(zipBlob);
-     a.download = zipFileName;
-     a.click();
-     URL.revokeObjectURL(a.href);
-   } catch (error) {
-     toast.dismiss();
-     console.error("Bulk ZIP share failed:", error);
-
-     // Fallback to Link Share on failure
-     const folderUrl = `${window.location.origin}/folder/${currentFolder?._id}`;
-     if (navigator.share) {
-       await navigator.share({
-         url: folderUrl,
-         title: `Folder: ${currentFolder?.name}`,
-       });
-       toast.error("Sharing failed. Folder link shared instead.");
-     } else {
-       navigator.clipboard.writeText(folderUrl);
-       toast.error("Sharing failed. Folder link copied.");
-     }
-   }
- };
 
   const handlePrintPreview = async (fileUrl, fileName = "document") => {
     if (!fileUrl) return toast.error("No file to print");
@@ -706,12 +749,12 @@ function FolderDetail() {
               </div>
 
               {/* RIGHT SIDE: Action Buttons */}
-              <div className="flex items-center gap-1 sm:gap-2">
+              <div className="flex  items-center gap-4 sm:gap-2">
                 {/* Bulk Share Button (Icon-only on mobile) */}
                 <button
                   onClick={triggerBulkShare}
                   disabled={selectedFiles.size === 0}
-                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                  className="flex gap-2 items-center  px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
                 >
                   <Share2 size={20} />
                   <span className="hidden sm:inline">Share</span>
@@ -721,7 +764,7 @@ function FolderDetail() {
                 <button
                   onClick={triggerBulkDownload}
                   disabled={selectedFiles.size === 0}
-                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                  className="flex gap-2 items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
                 >
                   <Download size={20} />
                   <span className="hidden sm:inline">Download</span>
@@ -731,7 +774,7 @@ function FolderDetail() {
                 <button
                   onClick={triggerBulkDelete}
                   disabled={selectedFiles.size === 0}
-                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-red-500 hover:bg-red-600 rounded-xl transition disabled:opacity-50"
+                  className="flex gap-2 items-center px-2 py-2 sm:px-3 sm:py-2 bg-red-500 hover:bg-red-600 rounded-xl transition disabled:opacity-50"
                 >
                   <Trash2 size={20} />
                   <span className="hidden sm:inline">Delete</span>
@@ -743,7 +786,7 @@ function FolderDetail() {
                       ? deselectAll
                       : selectAll
                   }
-                  className="flex items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition"
+                  className="flex gap-2 items-center px-2 py-2 sm:px-3 sm:py-2 bg-white/20 hover:bg-white/30 rounded-xl transition"
                 >
                   {selectedFiles.size === filteredFiles.length ? (
                     <CheckSquare size={20} />
@@ -825,7 +868,7 @@ function FolderDetail() {
                 layout
                 key={file._id}
                 id={file._id}
-                className={`relative bg-white w-[140px] sm:w-[170px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between
+                className={`relative bg-white w-[130px] sm:w-[160px] md:w-[210px] h-[220px] rounded-2xl shadow hover:shadow-xl transition-all duration-200 p-3 group cursor-pointer flex flex-col justify-between
                   ${
                     isSelected
                       ? "ring-4 ring-blue-500 scale-105 shadow-2xl"
