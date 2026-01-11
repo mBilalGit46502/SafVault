@@ -9,21 +9,29 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_SECRETE,
 });
 
-const allowedTypes =
-  /jpeg|jpg|png|gif|pdf|txt|docx|mp4|zip|webm|ogg|wav|mp3|mov|avi|mkv/;
+// --- Allowed file extensions ---
+const allowedTypes = /jpeg|jpg|png|gif|pdf|txt|docx|mp4|zip|webm|ogg|wav|mp3|mov|avi|mkv/;
 
+// --- File Filter ---
 const fileFilter = (req, file, cb) => {
-  const extName = allowedTypes.test(
-    path.extname(file.originalname).toLowerCase()
-  );
-  const mimeType = allowedTypes.test(file.mimetype);
-  if (extName && mimeType) {
+  const extName = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+
+  const mimeTypes = [
+    "image/jpeg", "image/jpg", "image/png", "image/gif",
+    "application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/zip",
+    "video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska",
+    "audio/ogg", "audio/wav", "audio/mpeg"
+  ];
+
+  if (extName && mimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(" Only allowed file formats (images, videos, docs, zips)."));
+    cb(new Error("Only allowed file formats (images, videos, docs, zips)."));
   }
 };
 
+// --- Cloudinary Storage ---
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
@@ -35,9 +43,7 @@ const storage = new CloudinaryStorage({
 
     if ([".pdf", ".txt", ".zip", ".docx"].includes(ext)) {
       resourceType = "raw";
-    } else if (
-      [".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"].includes(ext)
-    ) {
+    } else if ([".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"].includes(ext)) {
       resourceType = "video";
     } else {
       resourceType = "image";
@@ -46,16 +52,17 @@ const storage = new CloudinaryStorage({
     return {
       folder: "privacyApp",
       public_id: `${Date.now()}-${safeName}`,
-      resource_type: resourceType, 
+      resource_type: resourceType,
     };
   },
 });
 
+// --- Multer Upload ---
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 20 * 1024 * 1024, // 20 MB
+    fileSize: 50 * 1024 * 1024, // 50MB max
   },
 });
 
