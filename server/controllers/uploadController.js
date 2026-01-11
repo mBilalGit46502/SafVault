@@ -205,6 +205,7 @@ export const getSelectedFolders = async (req, res) => {
     });
   }
 };
+
 export const uploadFileOnFolder = async (req, res) => {
   try {
     const { id } = req.params;
@@ -226,19 +227,16 @@ export const uploadFileOnFolder = async (req, res) => {
         success: false,
       });
     }
-
-    // Optional: check if file already exists
-    // const file = await File.findOne({ name: req.file.originalname });
-    // if (file) return res.status(405).json({
-    //   message: "File already exists",
-    //   error: true,
-    //   success: false
-    // });
-
+    // const file=await File.findOne({name:req.file.name})
+    // if(file) return res.status(405).json({
+    //   message:"File already exist",
+    //   error:true,
+    //   success:false
+    // })
     const newFile = await File.create({
       name: req.file.originalname,
       url: req.file.path,
-      public_id: req.file.filename || req.file.public_id,
+      public_id: req.file.filename || req.file.public_id, // 🔥 Important
       folder: id,
       uploadedBy: userId,
     });
@@ -255,14 +253,13 @@ export const uploadFileOnFolder = async (req, res) => {
       data: newFile,
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error(" Upload error:", error);
 
-    // Clean up from cloudinary if file already uploaded
     try {
       if (req.file?.path) {
         let publicId = req.file.filename || req.file.public_id;
 
-        // Extract manually if not present
+        // extract manually if not present
         if (!publicId && req.file.path) {
           publicId = req.file.path
             .split("/upload/")[1]
@@ -272,11 +269,11 @@ export const uploadFileOnFolder = async (req, res) => {
 
         if (publicId) {
           const cloudRes = await cloudinary.uploader.destroy(publicId);
-          console.log("Cloudinary cleanup:", cloudRes);
+          console.log(" Cloudinary cleanup:", cloudRes);
         }
       }
     } catch (cleanupError) {
-      console.warn("Cleanup failed:", cleanupError.message);
+      console.warn(" Cleanup failed:", cleanupError.message);
     }
 
     return res.status(500).json({
@@ -286,6 +283,7 @@ export const uploadFileOnFolder = async (req, res) => {
     });
   }
 };
+
 export const deleteFolder = async (req, res) => {
   try {
     const { id } = req.params;
