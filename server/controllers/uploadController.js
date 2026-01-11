@@ -208,78 +208,52 @@ export const getSelectedFolders = async (req, res) => {
 
 export const uploadFileOnFolder = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { userId } = req.userId;
-
-    const Folder = await folder.findOne({ _id: id, createdBy: userId });
-    if (!Folder) {
-      return res.status(401).json({
-        message: "Folder not found or unauthorized",
-        error: true,
-        success: false,
-      });
-    }
-
+    // Check if file exists
     if (!req.file) {
       return res.status(400).json({
-        message: "No file selected",
-        error: true,
         success: false,
+        message: "No file uploaded",
       });
     }
-    // const file=await File.findOne({name:req.file.name})
-    // if(file) return res.status(405).json({
-    //   message:"File already exist",
-    //   error:true,
-    //   success:false
-    // })
+
+    // Get folder ID from params
+    const folderId = req.params.id;
+
+    // Optional: check if folder exists
+    const folder = await Folder.findById(folderId);
+    if (!folder) {
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found",
+      });
+    }
+
+    // Save file info in DB (optional)
     const newFile = await File.create({
       name: req.file.originalname,
-      url: req.file.path,
-      public_id: req.file.filename || req.file.public_id, // 🔥 Important
-      folder: id,
-      uploadedBy: userId,
+      cloudinaryId: req.file.filename || req.file.public_id,
+      url: req.file.path, // Cloudinary URL
+      size: req.file.size,
+      type: req.file.mimetype,
+      folder: folderId,
+      uploadedBy: req.user._id, // assuming auth middleware sets req.user
     });
 
-    Folder.files.push(newFile._id);
-    await Folder.save();
-
-    console.log("newFile", newFile);
+    // Add file reference to folder
+    folder.files.push(newFile._id);
+    await folder.save();
 
     return res.status(200).json({
-      message: "File uploaded successfully",
-      error: false,
       success: true,
+      message: "File uploaded successfully",
       data: newFile,
     });
   } catch (error) {
-    console.error(" Upload error:", error);
-
-    try {
-      if (req.file?.path) {
-        let publicId = req.file.filename || req.file.public_id;
-
-        // extract manually if not present
-        if (!publicId && req.file.path) {
-          publicId = req.file.path
-            .split("/upload/")[1]
-            ?.split(".")[0]
-            ?.replace(/^v\d+\//, "");
-        }
-
-        if (publicId) {
-          const cloudRes = await cloudinary.uploader.destroy(publicId);
-          console.log(" Cloudinary cleanup:", cloudRes);
-        }
-      }
-    } catch (cleanupError) {
-      console.warn(" Cleanup failed:", cleanupError.message);
-    }
-
+    console.error("Upload error:", error);
     return res.status(500).json({
-      message: "File upload failed",
-      error: true,
       success: false,
+      message: "Server error while uploading file",
+      error: error.message,
     });
   }
 };
