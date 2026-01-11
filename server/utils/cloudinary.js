@@ -6,7 +6,7 @@ import path from "path";
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_KEY,
-  api_secret: process.env.CLOUDINARY_SECRETE,
+  api_secret: process.env.CLOUDINARY_SECRET,
 });
 
 const allowedTypes =
@@ -54,7 +54,7 @@ const storage = new CloudinaryStorage({
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 export default upload;
